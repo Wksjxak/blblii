@@ -107,7 +107,7 @@ internal fun PlayerActivity.refreshAreaIncludeItems() {
 }
 
 internal fun PlayerActivity.showAreaIncludePanel() {
-    onOverlayPanelShown()
+    onOverlayPanelShown(openedFromMenuKey = false)
     hideBottomCardPanel(finalizeOverlaySession = false)
     if (isCommentsPanelVisible()) {
         videoCommentsController?.clearTransientUi()
