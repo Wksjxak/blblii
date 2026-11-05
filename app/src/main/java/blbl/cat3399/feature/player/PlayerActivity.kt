@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.util.TypedValue
 import android.view.FocusFinder
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView

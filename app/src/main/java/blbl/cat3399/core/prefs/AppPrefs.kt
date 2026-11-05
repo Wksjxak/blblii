@@ -3,6 +3,7 @@ package blbl.cat3399.core.prefs
 import android.content.Context
 import android.provider.Settings
 import blbl.cat3399.core.api.SponsorBlockCategories
+import blbl.cat3399.core.tv.hasPointingDeviceInput
 import blbl.cat3399.core.tv.isTvDevice
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
@@ -14,7 +15,10 @@ import kotlin.math.roundToInt
 class AppPrefs(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("blbl_prefs", Context.MODE_PRIVATE)
-    private val defaultPlayerTouchGesturesEnabled by lazy(LazyThreadSafetyMode.NONE) { !appContext.isTvDevice() }
+    // 非 TV 设备默认开启触摸手势；TV 设备默认关闭，但接了鼠标/触摸板时也默认开启，
+    // 否则外接鼠标的 TV 上左键点击无法唤出播放控制栏。每次读取实时判断，支持热插拔后重新进入播放器生效。
+    private val defaultPlayerTouchGesturesEnabled: Boolean
+        get() = !appContext.isTvDevice() || appContext.hasPointingDeviceInput()
 
     var disclaimerAccepted: Boolean
         get() = prefs.getBoolean(KEY_DISCLAIMER_ACCEPTED, false)
