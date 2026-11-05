@@ -55,6 +55,8 @@
     <string name="search_tab_media">影视</string>
     <string name="search_tab_live">直播</string>
     <string name="search_tab_user">用户</string>
+    <string name="dynamic_up_search_hint">搜索UP主</string>
+    <string name="dynamic_up_search_no_result">没有匹配的UP主</string>
     <string name="search_sort_title">排序</string>
     <string name="search_sort_totalrank">综合排序</string>
     <string name="search_sort_click">最多点击</string>

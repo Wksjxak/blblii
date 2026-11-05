@@ -532,7 +532,6 @@ class SettingsRenderer(
                 listOf(
                     SettingEntry(SettingId.AppVersion, "版本", BuildConfig.VERSION_NAME, null),
                     SettingEntry(SettingId.ProjectUrl, "项目地址", SettingsConstants.PROJECT_URL, null),
-                    SettingEntry(SettingId.QqGroup, "QQ交流群", SettingsConstants.QQ_GROUP, null),
                     SettingEntry(SettingId.LogTag, "日志标签", "BLBL", "用于 Logcat 过滤"),
                     SettingEntry(SettingId.ExportLogs, "导出日志", "保存文件", null),
                     playerKernelEntry(),

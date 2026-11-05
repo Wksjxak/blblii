@@ -2,11 +2,14 @@ package blbl.cat3399.feature.dynamic
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -44,8 +47,11 @@ import blbl.cat3399.ui.BackPressHandler
 import blbl.cat3399.ui.RefreshKeyHandler
 import blbl.cat3399.ui.SidebarFocusHost
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
@@ -154,6 +160,7 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                     ),
             ).also { it.install() }
         applyUiMode()
+        setupFollowingSearch(binding)
 
         val actionController =
             VideoCardActionController(
@@ -249,6 +256,8 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
     private var baseFollowings: List<Following> = emptyList()
     private var followItems: List<FollowingAdapter.FollowingUi> = emptyList()
     private var selectedMid: Long = FollowingAdapter.MID_ALL
+    private var followingSearchQuery: String = ""
+    private var searchLoadJob: Job? = null
 
     private fun onFollowingClicked(following: FollowingAdapter.FollowingUi) {
         selectedMid = following.mid
@@ -259,17 +268,32 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
 
     private fun renderFollowings() {
         followItems = buildFollowingUiList()
-        if (selectedMid != FollowingAdapter.MID_ALL && followItems.none { it.mid == selectedMid }) {
+        // 选中项随搜索过滤只按全部关注列表校验，避免搜索时被误重置为「所有」。
+        if (selectedMid != FollowingAdapter.MID_ALL && baseFollowings.none { it.mid == selectedMid }) {
             selectedMid = FollowingAdapter.MID_ALL
         }
         followAdapter.submit(followItems, selected = selectedMid)
+        _binding?.tvFollowingEmpty?.isVisible =
+            followingSearchQuery.trim().isNotEmpty() && followItems.isEmpty()
+    }
+
+    /** 后台预计算拼音缓存，避免首次搜索卡顿。 */
+    private fun prewarmPinyinCache(names: List<String>) {
+        if (names.isEmpty() || android.os.Build.VERSION.SDK_INT < 24) return
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            PinyinSearch.prewarm(names)
+        }
     }
 
     private fun buildFollowingUiList(): List<FollowingAdapter.FollowingUi> {
+        val query = followingSearchQuery.trim()
         val items = ArrayList<FollowingAdapter.FollowingUi>(baseFollowings.size + 1)
-        items += FollowingAdapter.FollowingUi(FollowingAdapter.MID_ALL, "所有", null, isAll = true)
-        val orderedFollowings = orderedFollowings()
-        for (following in orderedFollowings) {
+        // 搜索时隐藏「所有」，只展示匹配到的 UP 主。
+        if (query.isEmpty()) {
+            items += FollowingAdapter.FollowingUi(FollowingAdapter.MID_ALL, "所有", null, isAll = true)
+        }
+        for (following in orderedFollowings()) {
+            if (query.isNotEmpty() && !PinyinSearch.matches(following.name, query)) continue
             val mid = following.mid
             val hasRecentUpdate = recentUpdatePriorityMids.contains(mid)
             items +=
@@ -397,6 +421,7 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
             }
 
             baseFollowings = filtered
+            prewarmPinyinCache(filtered.map { it.name })
             renderFollowings()
             followPage += 1
             followEndReached = !res.hasMore
@@ -414,33 +439,60 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
     private fun loadMoreFollowings() {
         if (followIsLoadingMore || followEndReached) return
         if (userMid <= 0) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            loadMoreFollowingsPage()
+        }
+    }
+
+    /** 加载一页关注；返回本页是否有新增。 */
+    private suspend fun loadMoreFollowingsPage(): Boolean {
+        if (followIsLoadingMore || followEndReached) return false
+        if (userMid <= 0) return false
         val token = followRequestToken
         val targetPage = followPage.coerceAtLeast(1)
         followIsLoadingMore = true
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val res = BiliApi.followingsPage(vmid = userMid, pn = targetPage, ps = 50, order = currentFollowingListOrder)
-                if (token != followRequestToken) return@launch
+        return try {
+            val res = BiliApi.followingsPage(vmid = userMid, pn = targetPage, ps = 50, order = currentFollowingListOrder)
+            if (token != followRequestToken) return false
 
-                val filtered = res.items.filter { loadedFollowMids.add(it.mid) }
-                if (filtered.isNotEmpty()) {
-                    baseFollowings = baseFollowings + filtered
-                    renderFollowings()
-                }
-                followPage = targetPage + 1
-                followEndReached = !res.hasMore
-                _binding?.let { b ->
-                    b.recyclerFollowing.postIfAlive(isAlive = { _binding === b && isResumed }) {
-                        followingListController?.consumePendingFocusAfterLoadMore()
-                    }
-                }
-            } catch (t: Throwable) {
-                if (t is CancellationException) throw t
-                AppLog.e("Dynamic", "load followings failed page=$targetPage", t)
-            } finally {
-                if (token == followRequestToken) followIsLoadingMore = false
+            val filtered = res.items.filter { loadedFollowMids.add(it.mid) }
+            if (filtered.isNotEmpty()) {
+                baseFollowings = baseFollowings + filtered
+                prewarmPinyinCache(filtered.map { it.name })
+                renderFollowings()
             }
+            followPage = targetPage + 1
+            followEndReached = !res.hasMore
+            _binding?.let { b ->
+                b.recyclerFollowing.postIfAlive(isAlive = { _binding === b && isResumed }) {
+                    followingListController?.consumePendingFocusAfterLoadMore()
+                }
+            }
+            filtered.isNotEmpty()
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            AppLog.e("Dynamic", "load followings failed page=$targetPage", t)
+            false
+        } finally {
+            if (token == followRequestToken) followIsLoadingMore = false
         }
+    }
+
+    /**
+     * 搜索时按需向后翻页：直到匹配到 UP 主或关注列表到底，确保搜索覆盖全部已关注。
+     * 每次输入取消上一次任务，避免并发的翻页循环。
+     */
+    private fun ensureFollowingsLoadedForSearch(query: String) {
+        searchLoadJob?.cancel()
+        searchLoadJob = null
+        if (query.isEmpty() || followEndReached || userMid <= 0) return
+        searchLoadJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                while (isActive && !followEndReached) {
+                    if (baseFollowings.any { it.name.contains(query, ignoreCase = true) }) break
+                    if (!loadMoreFollowingsPage()) break
+                }
+            }
     }
 
     private fun resetAndLoadFeed() {
@@ -578,6 +630,8 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
     }
 
     override fun onDestroyView() {
+        searchLoadJob?.cancel()
+        searchLoadJob = null
         _bindingLogin = null
         dynamicGridController?.release()
         dynamicGridController = null
@@ -619,6 +673,34 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         b.swipeRefresh.isRefreshing = true
         loadAll(resetFeed = true)
         return true
+    }
+
+    private fun setupFollowingSearch(binding: FragmentDynamicBinding) {
+        binding.etFollowingSearch.addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    val q = s?.toString().orEmpty()
+                    if (q == followingSearchQuery) return
+                    followingSearchQuery = q
+                    renderFollowings()
+                    _binding?.recyclerFollowing?.scrollToPosition(0)
+                    ensureFollowingsLoadedForSearch(q.trim())
+                }
+            },
+        )
+        binding.etFollowingSearch.setOnEditorActionListener { _, _, _ ->
+            hideKeyboard(binding.etFollowingSearch)
+            true
+        }
+    }
+
+    private fun hideKeyboard(view: View) {
+        val imm =
+            requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+        imm?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun applyUiMode() {
