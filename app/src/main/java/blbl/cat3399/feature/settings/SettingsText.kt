@@ -201,6 +201,14 @@ object SettingsText {
         return String.format(Locale.US, "%.2fx", v)
     }
 
+    fun uiFontScaleText(factor: Float): String {
+        val v = factor.takeIf { it.isFinite() } ?: 1.0f
+        return String.format(Locale.US, "%.2f", v)
+    }
+
+    fun playbackSpeedModeText(mode: String): String =
+        if (mode == AppPrefs.PLAYBACK_SPEED_MODE_SIMPLE) "简单（0.25 步进）" else "细致（0.01 步进）"
+
     fun cdnText(code: String): String =
         when (code) {
             blbl.cat3399.core.prefs.AppPrefs.PLAYER_CDN_MCDN -> "mcdn"

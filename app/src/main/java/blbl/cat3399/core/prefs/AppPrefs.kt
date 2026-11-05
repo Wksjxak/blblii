@@ -65,6 +65,11 @@ class AppPrefs(context: Context) {
         }
         set(value) = prefs.edit().putFloat(KEY_UI_SCALE_FACTOR, normalizeUiScaleFactor(value)).apply()
 
+    /** 界面字体大小（独立倍率，作用于整体界面文字/UI，默认 1.00）。 */
+    var uiFontScale: Float
+        get() = prefs.getFloat(KEY_UI_FONT_SCALE, UI_FONT_SCALE_DEFAULT)
+        set(value) = prefs.edit().putFloat(KEY_UI_FONT_SCALE, normalizeUiFontScale(value)).apply()
+
     var themePreset: String
         get() {
             return normalizeThemePreset(prefs.getString(KEY_THEME_PRESET, THEME_PRESET_DEFAULT))
@@ -501,6 +506,11 @@ class AppPrefs(context: Context) {
     var playerSpeed: Float
         get() = prefs.getFloat(KEY_PLAYER_SPEED, 1.0f)
         set(value) = prefs.edit().putFloat(KEY_PLAYER_SPEED, value).apply()
+
+    /** 播放速度模式：fine=细致(0.01 步进) / simple=简单(0.25 步进)，默认细致。 */
+    var playbackSpeedMode: String
+        get() = normalizePlaybackSpeedMode(prefs.getString(KEY_PLAYBACK_SPEED_MODE, PLAYBACK_SPEED_MODE_FINE))
+        set(value) = prefs.edit().putString(KEY_PLAYBACK_SPEED_MODE, normalizePlaybackSpeedMode(value)).apply()
 
     /** 进度滑动手势灵敏度倍率（0.5~2.0，1.0 为默认）。 */
     var playerSeekSensitivity: Float
@@ -1054,6 +1064,17 @@ class AppPrefs(context: Context) {
         return (snapped / 100f).coerceIn(UI_SCALE_FACTOR_MIN, UI_SCALE_FACTOR_MAX)
     }
 
+    private fun normalizePlaybackSpeedMode(value: String?): String =
+        if (value == PLAYBACK_SPEED_MODE_SIMPLE || value == PLAYBACK_SPEED_MODE_FINE) value else PLAYBACK_SPEED_MODE_FINE
+
+    private fun normalizeUiFontScale(value: Float): Float {        val v = if (value.isFinite()) value else UI_FONT_SCALE_DEFAULT
+        val clamped = v.coerceIn(UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX)
+        val scaled = (clamped * 100f).roundToInt()
+        val step = (UI_FONT_SCALE_STEP * 100f).roundToInt().coerceAtLeast(1)
+        val snapped = ((scaled + step / 2) / step) * step
+        return (snapped / 100f).coerceIn(UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX)
+    }
+
     private fun normalizePlayerShortSeekStepSeconds(value: Int): Int {
         return if (PLAYER_SHORT_SEEK_STEP_SECONDS_OPTIONS.contains(value)) value else PLAYER_SHORT_SEEK_STEP_SECONDS_DEFAULT
     }
@@ -1078,6 +1099,18 @@ class AppPrefs(context: Context) {
         const val UI_SCALE_FACTOR_MAX = 1.40f
         const val UI_SCALE_FACTOR_STEP = 0.05f
         const val UI_SCALE_FACTOR_DEFAULT = 1.00f
+
+        // 界面字体大小（独立倍率）
+        const val UI_FONT_SCALE_MIN = 0.80f
+        const val UI_FONT_SCALE_MAX = 1.30f
+        const val UI_FONT_SCALE_STEP = 0.05f
+        const val UI_FONT_SCALE_DEFAULT = 1.00f
+        /** 界面放大 × 界面字体 的合并上限，防止文字/布局过度膨胀。 */
+        const val UI_EFFECTIVE_SCALE_MAX = 1.50f
+
+        // 播放速度模式
+        const val PLAYBACK_SPEED_MODE_FINE = "fine"
+        const val PLAYBACK_SPEED_MODE_SIMPLE = "simple"
 
         // 评论字号
         const val COMMENT_TEXT_SIZE_SP_DEFAULT = 14f
@@ -1123,6 +1156,7 @@ class AppPrefs(context: Context) {
         private const val KEY_BUVID_ACTIVATED_EPOCH_DAY = "buvid_activated_epoch_day"
         private const val KEY_SIDEBAR_SIZE = "sidebar_size"
         private const val KEY_UI_SCALE_FACTOR = "ui_scale_factor"
+        private const val KEY_UI_FONT_SCALE = "ui_font_scale"
         private const val KEY_THEME_PRESET = "theme_preset"
         private const val KEY_STARTUP_PAGE = "startup_page"
         private const val KEY_CUSTOM_PAGE_CONFIG = "custom_page_config"
@@ -1177,6 +1211,7 @@ class AppPrefs(context: Context) {
         private const val KEY_SUBTITLE_BOTTOM_PADDING_FRACTION = "subtitle_bottom_padding_fraction"
         private const val KEY_SUBTITLE_BACKGROUND_OPACITY = "subtitle_background_opacity"
         private const val KEY_PLAYER_SPEED = "player_speed"
+        private const val KEY_PLAYBACK_SPEED_MODE = "playback_speed_mode"
         private const val KEY_PLAYER_SEEK_SENSITIVITY = "player_seek_sensitivity"
         private const val KEY_TIMER_CUSTOM_LAST_HOURS = "timer_custom_last_hours"
         private const val KEY_TIMER_CUSTOM_LAST_MINUTES = "timer_custom_last_minutes"

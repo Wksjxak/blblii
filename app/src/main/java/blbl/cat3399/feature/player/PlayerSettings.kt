@@ -36,6 +36,7 @@ internal object PlayerSettingKeys {
     const val CODEC = "codec"
     const val PLAYBACK_SPEED = "playback_speed"
     const val SEEK_SENSITIVITY = "seek_sensitivity"
+    const val UI_FONT_SCALE = "ui_font_scale"
     const val AUDIO_BALANCE = "audio_balance"
     const val PLAYBACK_MODE = "playback_mode"
     const val SUBTITLE_MENU = "subtitle_menu"
@@ -345,6 +346,7 @@ internal fun PlayerActivity.handleSettingsItemClick(item: PlayerSettingsAdapter.
         PlayerSettingKeys.AUDIO_TRACK -> showAudioDialog()
         PlayerSettingKeys.CODEC -> showCodecDialog()
         PlayerSettingKeys.PLAYBACK_SPEED -> showSpeedDialog()
+        PlayerSettingKeys.UI_FONT_SCALE -> showUiFontScaleDialog()
         PlayerSettingKeys.SEEK_SENSITIVITY -> showSeekSensitivityDialog()
         PlayerSettingKeys.AUDIO_BALANCE -> showAudioBalanceDialog()
         PlayerSettingKeys.PLAYBACK_MODE -> showPlaybackModeDialog()
@@ -565,6 +567,7 @@ private fun PlayerActivity.buildRootSettingsItems(
         settingItem(PlayerSettingKeys.AUDIO_TRACK, "音轨", audioSubtitle()),
         settingItem(PlayerSettingKeys.CODEC, "视频编码", session.preferCodec),
         settingItem(PlayerSettingKeys.PLAYBACK_SPEED, "播放速度", String.format(Locale.US, "%.2fx", session.playbackSpeed)),
+        settingItem(PlayerSettingKeys.UI_FONT_SCALE, "界面字体", String.format(Locale.US, "%.2f", BiliClient.prefs.uiFontScale)),
         settingItem(PlayerSettingKeys.SEEK_SENSITIVITY, "进度手势灵敏度", String.format(Locale.US, "%.1fx", BiliClient.prefs.playerSeekSensitivity)),
         settingItem(PlayerSettingKeys.PLAYBACK_MODE, "播放模式", playbackModeSubtitle()),
         subtitleSupported.takeIf { it }?.let { settingItem(PlayerSettingKeys.SUBTITLE_MENU, "字幕设置", ">") },
@@ -824,7 +827,7 @@ internal fun PlayerActivity.showCodecDialog() {
 }
 
 internal fun PlayerActivity.showSpeedDialog() {
-    val options = PlaybackSettingChoices.finePlaybackSpeeds
+    val options = PlaybackSettingChoices.playbackSpeedsFor(BiliClient.prefs.playbackSpeedMode)
     val current =
         options.indices.minByOrNull { kotlin.math.abs(options[it] - session.playbackSpeed) }
             ?: options.indexOf(1.0f).takeIf { it >= 0 }
@@ -841,6 +844,22 @@ internal fun PlayerActivity.showSpeedDialog() {
             syncToGlobal = { playerSpeed = it },
             afterApplied = { player?.setPlaybackSpeed(it) },
         )
+    }
+}
+
+internal fun PlayerActivity.showUiFontScaleDialog() {
+    val options = PlaybackSettingChoices.uiFontScalesFor(BiliClient.prefs.uiScaleFactor)
+    val current =
+        options.indices.minByOrNull { kotlin.math.abs(options[it] - BiliClient.prefs.uiFontScale) }
+            ?: options.indexOf(1.0f).takeIf { it >= 0 }
+            ?: 0
+    showSettingsChoiceDialog(
+        title = "界面字体",
+        options = options,
+        checkedIndex = current,
+        label = { String.format(Locale.US, "%.2f", it) },
+    ) { v ->
+        BiliClient.prefs.uiFontScale = v.coerceIn(0.80f, 1.30f)
     }
 }
 

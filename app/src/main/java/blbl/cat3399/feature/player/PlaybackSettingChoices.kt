@@ -11,8 +11,14 @@ internal object PlaybackSettingChoices {
     val audioTrackIds: List<Int> = listOf(30251, 30250, 30280, 30232, 30216)
     val playbackSpeeds: List<Float> = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f)
     val extendedPlaybackSpeeds: List<Float> = playbackSpeeds + listOf(3.0f, 4.0f)
-    /** 倍速 0.05 梯度细调：0.25x ~ 4.00x，步长 0.05。 */
+    /** 倍速 0.01 梯度细调（细致）：0.25x ~ 4.00x，步长 0.01。 */
     val finePlaybackSpeeds: List<Float> = (25..400).map { it / 100f }
+    /** 倍速简单档位（简单）：0.25x ~ 4.00x，步长 0.25。 */
+    val simplePlaybackSpeeds: List<Float> = (25..400 step 25).map { it / 100f }
+
+    /** 按「播放速度模式」返回对应档位列表。 */
+    fun playbackSpeedsFor(mode: String): List<Float> =
+        if (mode == AppPrefs.PLAYBACK_SPEED_MODE_SIMPLE) simplePlaybackSpeeds else finePlaybackSpeeds
     /** 进度手势灵敏度：0.5x ~ 2.0x，步长 0.1。 */
     val seekSensitivities: List<Float> = (5..20).map { it / 10f }
     val subtitleTextSizes: List<Int> = (10..60 step 2).toList()
@@ -54,5 +60,17 @@ internal object PlaybackSettingChoices {
             .coerceIn(AppPrefs.COMMENT_TEXT_SIZE_SP_MIN, base).toInt()
         return (AppPrefs.COMMENT_TEXT_SIZE_SP_MIN.toInt()..cap step 2).toList()
             .ifEmpty { listOf(AppPrefs.COMMENT_TEXT_SIZE_SP_MIN.toInt()) }
+    }
+
+    /** 界面字体可选档位：上限随「界面放大」动态收紧（合并值不超过 UI_EFFECTIVE_SCALE_MAX）。 */
+    fun uiFontScalesFor(uiScaleFactor: Float): List<Float> {
+        val minStep = Math.round(AppPrefs.UI_FONT_SCALE_MIN * 100f)
+        val step = Math.round(AppPrefs.UI_FONT_SCALE_STEP * 100f).coerceAtLeast(1)
+        val maxFontPct =
+            (AppPrefs.UI_EFFECTIVE_SCALE_MAX /
+                uiScaleFactor.coerceIn(AppPrefs.UI_SCALE_FACTOR_MIN, AppPrefs.UI_SCALE_FACTOR_MAX) * 100f)
+                .roundToInt()
+                .coerceIn(minStep, Math.round(AppPrefs.UI_FONT_SCALE_MAX * 100f))
+        return (minStep..maxFontPct step step).map { it / 100f }
     }
 }

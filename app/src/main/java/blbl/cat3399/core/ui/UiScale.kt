@@ -24,6 +24,8 @@ object UiScale {
                 AppPrefs(context.applicationContext)
             }
         val raw = prefs.uiScaleFactor
-        return raw.coerceIn(AppPrefs.UI_SCALE_FACTOR_MIN, AppPrefs.UI_SCALE_FACTOR_MAX)
+        // 界面放大 × 界面字体，合并后作为整体 UI 缩放生效，并对合并值设上限防溢出。
+        val effective = raw * prefs.uiFontScale
+        return effective.coerceIn(AppPrefs.UI_SCALE_FACTOR_MIN, AppPrefs.UI_EFFECTIVE_SCALE_MAX)
     }
 }

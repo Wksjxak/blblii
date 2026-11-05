@@ -247,6 +247,12 @@ class SettingsRenderer(
                     ),
                     SettingEntry(SettingId.PgcGridSpanCount, "番剧/电视剧每行卡片数量", SettingsText.gridSpanText(prefs.pgcGridSpanCount), null),
                     SettingEntry(SettingId.UiScaleFactor, "界面大小", SettingsText.uiScaleFactorText(prefs.uiScaleFactor), null),
+                    SettingEntry(
+                        SettingId.UiFontScale,
+                        "界面字体",
+                        SettingsText.uiFontScaleText(prefs.uiFontScale),
+                        "独立于界面放大；当前上限 ${SettingsText.uiFontScaleText(PlaybackSettingChoices.uiFontScalesFor(prefs.uiScaleFactor).last())}",
+                    ),
                     SettingEntry(SettingId.FullscreenEnabled, "以全屏模式运行", if (prefs.fullscreenEnabled) "开" else "关", null),
                     SettingEntry(SettingId.AvoidDisplayCutout, "避开挖孔/圆角区域", if (prefs.avoidDisplayCutout) "开" else "关", null),
                     SettingEntry(SettingId.TabSwitchFollowsFocus, "tab跟随焦点切换", if (prefs.tabSwitchFollowsFocus) "开" else "关", null),
@@ -335,7 +341,13 @@ class SettingsRenderer(
                         if (prefs.playerSeamlessQualitySwitchEnabled) "开" else "关",
                         null,
                     ),
-                    SettingEntry(SettingId.PlayerSpeed, "默认播放速度", String.format(java.util.Locale.US, "%.2fx", prefs.playerSpeed), "0.05 步进细调"),
+                    SettingEntry(SettingId.PlayerSpeed, "默认播放速度", String.format(java.util.Locale.US, "%.2fx", prefs.playerSpeed), "档位随下方播放速度模式"),
+                    SettingEntry(
+                        SettingId.PlaybackSpeedMode,
+                        "播放速度模式",
+                        SettingsText.playbackSpeedModeText(prefs.playbackSpeedMode),
+                        "细致=0.01 步进；简单=0.25 步进",
+                    ),
                     SettingEntry(SettingId.PlayerSeekSensitivity, "进度手势灵敏度", String.format(java.util.Locale.US, "%.1fx", prefs.playerSeekSensitivity), "越大越灵敏"),
                     SettingEntry(
                         SettingId.PlayerShortSeekStepSeconds,

@@ -920,6 +920,21 @@ class SettingsInteractionHandler(
                 }
             }
 
+            SettingId.UiFontScale -> {
+                val factors = PlaybackSettingChoices.uiFontScalesFor(prefs.uiScaleFactor)
+                val items = factors.map { SettingsText.uiFontScaleText(it) }
+                showChoiceDialog(
+                    title = "界面字体",
+                    items = items,
+                    current = SettingsText.uiFontScaleText(prefs.uiFontScale),
+                ) { selected ->
+                    val factor = factors.getOrNull(items.indexOf(selected)) ?: prefs.uiFontScale
+                    prefs.uiFontScale = factor
+                    AppToast.show(activity, "界面字体：$selected")
+                    activity.recreate()
+                }
+            }
+
             SettingId.GridSpanCount -> {
                 val options = listOf("1", "2", "3", "4", "5", "6")
                 showChoiceDialog(
@@ -1263,7 +1278,7 @@ class SettingsInteractionHandler(
             }
 
             SettingId.PlayerSpeed -> {
-                val options = PlaybackSettingChoices.finePlaybackSpeeds
+                val options = PlaybackSettingChoices.playbackSpeedsFor(prefs.playbackSpeedMode)
                 showChoiceDialog(
                     title = "默认播放速度",
                     items = options.map { String.format(Locale.US, "%.2fx", it) },
@@ -1271,6 +1286,25 @@ class SettingsInteractionHandler(
                 ) { selected ->
                     val v = selected.removeSuffix("x").toFloatOrNull()
                     if (v != null) prefs.playerSpeed = v.coerceIn(0.25f, 4.0f)
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
+            SettingId.PlaybackSpeedMode -> {
+                val modes = listOf(
+                    AppPrefs.PLAYBACK_SPEED_MODE_FINE to "细致（0.01 步进）",
+                    AppPrefs.PLAYBACK_SPEED_MODE_SIMPLE to "简单（0.25 步进）",
+                )
+                val labels = modes.map { it.second }
+                showChoiceDialog(
+                    title = "播放速度模式",
+                    items = labels,
+                    current = modes.firstOrNull { it.first == prefs.playbackSpeedMode }?.second
+                        ?: labels.first(),
+                ) { selected ->
+                    val mode = modes.getOrNull(labels.indexOf(selected))?.first ?: AppPrefs.PLAYBACK_SPEED_MODE_FINE
+                    prefs.playbackSpeedMode = mode
+                    AppToast.show(activity, "播放速度模式：$selected")
                     renderer.refreshSection(entry.id)
                 }
             }
