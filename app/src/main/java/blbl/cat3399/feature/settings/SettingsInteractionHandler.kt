@@ -758,6 +758,18 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.RecommendFollowAccount -> {
+                prefs.recommendFollowAccount = !prefs.recommendFollowAccount
+                AppToast.show(activity, "默认推荐跟随账号：${if (prefs.recommendFollowAccount) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
+            SettingId.PopularFollowAccount -> {
+                prefs.popularFollowAccount = !prefs.popularFollowAccount
+                AppToast.show(activity, "热门推荐跟随账号：${if (prefs.popularFollowAccount) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.AvoidDisplayCutout -> {
                 prefs.avoidDisplayCutout = !prefs.avoidDisplayCutout
                 activity.reapplyWindowDisplayPolicy()
@@ -1049,7 +1061,7 @@ class SettingsInteractionHandler(
                     items = options.map { it.toString() },
                     current = prefs.danmakuTextSizeSp.toInt().toString(),
                 ) { selected ->
-                    prefs.danmakuTextSizeSp = (selected.toIntOrNull() ?: 18).toFloat().coerceIn(10f, 60f)
+                    prefs.danmakuTextSizeSp = (selected.toIntOrNull() ?: AppPrefs.DANMAKU_TEXT_SIZE_SP_DEFAULT.toInt()).toFloat().coerceIn(AppPrefs.DANMAKU_TEXT_SIZE_SP_MIN, AppPrefs.DANMAKU_TEXT_SIZE_SP_MAX)
                     renderer.refreshSection(entry.id)
                 }
             }
@@ -1061,7 +1073,7 @@ class SettingsInteractionHandler(
                     items = options.map { it.toString() },
                     current = prefs.commentTextSizeSp.toInt().toString(),
                 ) { selected ->
-                    prefs.commentTextSizeSp = (selected.toIntOrNull() ?: 14).toFloat().coerceIn(10f, 40f)
+                    prefs.commentTextSizeSp = (selected.toIntOrNull() ?: AppPrefs.COMMENT_TEXT_SIZE_SP_DEFAULT.toInt()).toFloat().coerceIn(AppPrefs.COMMENT_TEXT_SIZE_SP_MIN, AppPrefs.COMMENT_TEXT_SIZE_SP_MAX)
                     renderer.refreshSection(entry.id)
                 }
             }
@@ -1191,7 +1203,7 @@ class SettingsInteractionHandler(
                     items = options,
                     current = SettingsText.danmakuMergeStrengthText(prefs.danmakuMergeStrength),
                 ) { selected ->
-                    prefs.danmakuMergeStrength = (selected.toIntOrNull() ?: 3).coerceIn(1, 5)
+                    prefs.danmakuMergeStrength = (selected.toIntOrNull() ?: AppPrefs.DANMAKU_MERGE_STRENGTH_DEFAULT).coerceIn(AppPrefs.DANMAKU_MERGE_STRENGTH_MIN, AppPrefs.DANMAKU_MERGE_STRENGTH_MAX)
                     renderer.refreshSection(entry.id)
                 }
             }
@@ -1285,7 +1297,7 @@ class SettingsInteractionHandler(
                     current = String.format(Locale.US, "%.2fx", prefs.playerSpeed),
                 ) { selected ->
                     val v = selected.removeSuffix("x").toFloatOrNull()
-                    if (v != null) prefs.playerSpeed = v.coerceIn(0.25f, 4.0f)
+                    if (v != null) prefs.playerSpeed = v.coerceIn(AppPrefs.PLAYBACK_SPEED_MIN, AppPrefs.PLAYBACK_SPEED_MAX)
                     renderer.refreshSection(entry.id)
                 }
             }
@@ -1317,7 +1329,7 @@ class SettingsInteractionHandler(
                     current = String.format(Locale.US, "%.1fx", prefs.playerSeekSensitivity),
                 ) { selected ->
                     val v = selected.removeSuffix("x").toFloatOrNull()
-                    if (v != null) prefs.playerSeekSensitivity = v.coerceIn(0.5f, 2.0f)
+                    if (v != null) prefs.playerSeekSensitivity = v.coerceIn(AppPrefs.PLAYER_SEEK_SENSITIVITY_MIN, AppPrefs.PLAYER_SEEK_SENSITIVITY_MAX)
                     renderer.refreshSection(entry.id)
                 }
             }

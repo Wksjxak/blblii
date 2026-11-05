@@ -31,6 +31,7 @@ import blbl.cat3399.core.api.video.VideoTagsRequest
 import blbl.cat3399.core.api.video.UgcSeasonArchivesPage
 import blbl.cat3399.core.api.video.UgcSeasonArchivesRequest
 import blbl.cat3399.core.log.AppLog
+import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.net.WbiSigner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -103,7 +104,14 @@ internal class WebVideoApi(
                     ),
                 keys = keys,
             )
-        val json = transport.getJson(url)
+        val json =
+            if (BiliClient.prefs.recommendFollowAccount) {
+                transport.getJson(url)
+            } else {
+                // 不跟随账号：带游客指纹 cookie、剔除登录 cookie，走未登录默认推荐。
+                val guestHeader = BiliClient.cookies.guestCookieHeaderFor(url)?.let { mapOf("Cookie" to it) } ?: emptyMap()
+                transport.getJson(url, headers = guestHeader, noCookies = true)
+            }
         checkApiCode(json)
         val itemsJson = json.optJSONObject("data")?.optJSONArray("item") ?: JSONArray()
         val items = withContext(Dispatchers.Default) { mapper.parseVideoCards(itemsJson) }
@@ -120,7 +128,14 @@ internal class WebVideoApi(
                 "https://api.bilibili.com/x/web-interface/popular",
                 mapOf("pn" to safePn.toString(), "ps" to safePs.toString()),
             )
-        val json = transport.getJson(url)
+        // 热门跟随账号时带登录 cookie（个性化）；否则按未登录游客请求（默认热门机制）。
+        val json =
+            if (BiliClient.prefs.popularFollowAccount) {
+                transport.getJson(url)
+            } else {
+                val guestHeader = BiliClient.cookies.guestCookieHeaderFor(url)?.let { mapOf("Cookie" to it) } ?: emptyMap()
+                transport.getJson(url, headers = guestHeader, noCookies = true)
+            }
         checkApiCode(json)
         val data = json.optJSONObject("data") ?: JSONObject()
         return withContext(Dispatchers.Default) { mapper.parsePopularPage(data = data, request = safeRequest) }

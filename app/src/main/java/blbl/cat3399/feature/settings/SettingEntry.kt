@@ -36,6 +36,8 @@ enum class SettingId(
     VideoCardLongPressAction("video_card_long_press_action"),
     FollowingListOrder("following_list_order"),
     MainHomeVisibleTabs("main_home_visible_tabs"),
+    RecommendFollowAccount("recommend_follow_account"),
+    PopularFollowAccount("popular_follow_account"),
     MainCategoryVisibleTabs("main_category_visible_tabs"),
     MainLiveVisibleTabs("main_live_visible_tabs"),
     MainMyVisibleTabs("main_my_visible_tabs"),

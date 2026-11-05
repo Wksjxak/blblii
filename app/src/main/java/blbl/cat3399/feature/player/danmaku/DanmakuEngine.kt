@@ -14,6 +14,7 @@ import blbl.cat3399.core.emote.EmoteBitmapLoader
 import blbl.cat3399.core.emote.ReplyEmotePanelRepository
 import blbl.cat3399.core.model.Danmaku
 import blbl.cat3399.core.model.isHighLiked
+import blbl.cat3399.core.prefs.AppPrefs
 import blbl.cat3399.feature.player.danmaku.model.DanmakuCacheState
 import blbl.cat3399.feature.player.danmaku.model.DanmakuItem
 import blbl.cat3399.feature.player.danmaku.model.DanmakuInlineSegment
@@ -1203,7 +1204,7 @@ internal class DanmakuEngine(
         if (!config.mergeDuplicateEnabled) return filtered
         if (filtered.isEmpty()) return filtered
         // 强度 -> 最少合并数量阈值（5 档）。
-        val threshold = (6 - config.mergeStrength.coerceIn(1, 5)).coerceIn(2, 5)
+        val threshold = (6 - config.mergeStrength.coerceIn(AppPrefs.DANMAKU_MERGE_STRENGTH_MIN, AppPrefs.DANMAKU_MERGE_STRENGTH_MAX)).coerceIn(2, 5)
         val keep = LinkedHashMap<String, Danmaku>()
         for (d in filtered) {
             if (d.mode == 1 || d.mode == 6) {

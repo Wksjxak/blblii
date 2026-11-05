@@ -48,6 +48,27 @@ class CookieStore(
         return cookieHeaderFor(httpUrl)
     }
 
+    companion object {
+        /** 登录标识 cookie：构造「游客头」时需要剔除，避免暴露/携带账号兴趣。 */
+        private val LOGIN_COOKIE_NAMES =
+            setOf("SESSDATA", "bili_jct", "DedeUserID", "DedeUserID__ckMd5", "sid", "bili_ticket")
+    }
+
+    /**
+     * 构造仅含游客/设备指纹 cookie 的请求头（剔除登录标识）。
+     * 用于「推荐不跟随账号」场景：保留 buvid3/buvid4 等必备指纹，避免被风控拦截。
+     */
+    fun guestCookieHeaderFor(url: String): String? {
+        val httpUrl = runCatching { url.toHttpUrl() }.getOrNull() ?: return null
+        val now = System.currentTimeMillis()
+        val cookies = store.values.flatten().filter {
+            it.expiresAt >= now && it.matches(httpUrl) && it.name !in LOGIN_COOKIE_NAMES
+        }.toMutableList()
+        if (cookies.isEmpty()) return null
+        cookies.sortWith(compareByDescending<Cookie> { it.path.length }.thenBy { it.name })
+        return cookies.joinToString("; ") { "${it.name}=${it.value}" }
+    }
+
     fun cookieHeaderFor(url: HttpUrl): String? {
         val cookies = loadForRequest(url).toMutableList()
         if (cookies.isEmpty()) return null

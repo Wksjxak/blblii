@@ -101,7 +101,7 @@ object SettingsText {
         }
 
     fun danmakuMergeStrengthText(strength: Int): String =
-        when (strength.coerceIn(1, 5)) {
+        when (strength.coerceIn(AppPrefs.DANMAKU_MERGE_STRENGTH_MIN, AppPrefs.DANMAKU_MERGE_STRENGTH_MAX)) {
             1 -> "很低（需5条）"
             2 -> "低（需4条）"
             3 -> "中（需3条）"

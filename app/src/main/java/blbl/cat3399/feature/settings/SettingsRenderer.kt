@@ -246,6 +246,18 @@ class SettingsRenderer(
                         null,
                     ),
                     SettingEntry(SettingId.PgcGridSpanCount, "番剧/电视剧每行卡片数量", SettingsText.gridSpanText(prefs.pgcGridSpanCount), null),
+                    SettingEntry(
+                        SettingId.RecommendFollowAccount,
+                        "默认推荐跟随账号",
+                        if (prefs.recommendFollowAccount) "开" else "关",
+                        "开=按账号兴趣个性化推荐；关=未登录默认推荐",
+                    ),
+                    SettingEntry(
+                        SettingId.PopularFollowAccount,
+                        "热门推荐跟随账号",
+                        if (prefs.popularFollowAccount) "开" else "关",
+                        "热门榜也会按账号个性化；关=未登录默认热门",
+                    ),
                     SettingEntry(SettingId.UiScaleFactor, "界面大小", SettingsText.uiScaleFactorText(prefs.uiScaleFactor), null),
                     SettingEntry(
                         SettingId.UiFontScale,

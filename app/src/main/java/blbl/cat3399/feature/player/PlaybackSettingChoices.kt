@@ -12,9 +12,11 @@ internal object PlaybackSettingChoices {
     val playbackSpeeds: List<Float> = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f)
     val extendedPlaybackSpeeds: List<Float> = playbackSpeeds + listOf(3.0f, 4.0f)
     /** 倍速 0.01 梯度细调（细致）：0.25x ~ 4.00x，步长 0.01。 */
-    val finePlaybackSpeeds: List<Float> = (25..400).map { it / 100f }
+    val finePlaybackSpeeds: List<Float> =
+        ((AppPrefs.PLAYBACK_SPEED_MIN * 100).toInt()..(AppPrefs.PLAYBACK_SPEED_MAX * 100).toInt()).map { it / 100f }
     /** 倍速简单档位（简单）：0.25x ~ 4.00x，步长 0.25。 */
-    val simplePlaybackSpeeds: List<Float> = (25..400 step 25).map { it / 100f }
+    val simplePlaybackSpeeds: List<Float> =
+        ((AppPrefs.PLAYBACK_SPEED_MIN * 100).toInt()..(AppPrefs.PLAYBACK_SPEED_MAX * 100).toInt() step 25).map { it / 100f }
 
     /** 按「播放速度模式」返回对应档位列表。 */
     fun playbackSpeedsFor(mode: String): List<Float> =
@@ -40,17 +42,18 @@ internal object PlaybackSettingChoices {
         listOf(DanmakuLaneDensity.Sparse, DanmakuLaneDensity.Standard, DanmakuLaneDensity.Dense)
     val danmakuSpeeds: List<Int> = (1..10).toList()
     val aiShieldLevels: List<Int> = (1..10).toList()
-    val danmakuMergeStrengths: List<Int> = (1..5).toList()
+    val danmakuMergeStrengths: List<Int> =
+        (AppPrefs.DANMAKU_MERGE_STRENGTH_MIN..AppPrefs.DANMAKU_MERGE_STRENGTH_MAX).toList()
 
     /**
      * 弹幕字号可选档位：上限随「界面放大」(uiScale) 动态收紧，防止文字溢出。
      * 设计上限 60sp，界面放大越大则最大可选字号越小。
      */
     fun danmakuTextSizesFor(uiScale: Float): List<Int> {
-        val base = 60f
+        val base = AppPrefs.DANMAKU_TEXT_SIZE_SP_MAX
         val cap = (base / uiScale.coerceIn(AppPrefs.UI_SCALE_FACTOR_MIN, AppPrefs.UI_SCALE_FACTOR_MAX))
-            .coerceIn(12f, base).toInt()
-        return (10..cap step 2).toList().ifEmpty { listOf(10) }
+            .coerceIn(AppPrefs.DANMAKU_TEXT_SIZE_SP_MIN, base).toInt()
+        return (AppPrefs.DANMAKU_TEXT_SIZE_SP_MIN.toInt()..cap step 2).toList().ifEmpty { listOf(AppPrefs.DANMAKU_TEXT_SIZE_SP_MIN.toInt()) }
     }
 
     /** 评论字号可选档位：上限同样随「界面放大」动态收紧（设计上限 40sp）。 */

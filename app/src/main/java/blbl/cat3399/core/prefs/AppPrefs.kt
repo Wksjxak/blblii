@@ -240,8 +240,8 @@ class AppPrefs(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_DANMAKU_MERGE_DUPLICATE, value).apply()
 
     var danmakuMergeStrength: Int
-        get() = prefs.getInt(KEY_DANMAKU_MERGE_STRENGTH, DANMAKU_MERGE_STRENGTH_DEFAULT).coerceIn(1, 5)
-        set(value) = prefs.edit().putInt(KEY_DANMAKU_MERGE_STRENGTH, value.coerceIn(1, 5)).apply()
+        get() = prefs.getInt(KEY_DANMAKU_MERGE_STRENGTH, DANMAKU_MERGE_STRENGTH_DEFAULT).coerceIn(DANMAKU_MERGE_STRENGTH_MIN, DANMAKU_MERGE_STRENGTH_MAX)
+        set(value) = prefs.edit().putInt(KEY_DANMAKU_MERGE_STRENGTH, value.coerceIn(DANMAKU_MERGE_STRENGTH_MIN, DANMAKU_MERGE_STRENGTH_MAX)).apply()
 
     var danmakuAiShieldEnabled: Boolean
         get() = prefs.getBoolean(KEY_DANMAKU_AI_ENABLED, false)
@@ -264,13 +264,13 @@ class AppPrefs(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_DANMAKU_OPACITY, value).apply()
 
     var danmakuTextSizeSp: Float
-        get() = prefs.getFloat(KEY_DANMAKU_TEXT_SIZE_SP, 18f)
-        set(value) = prefs.edit().putFloat(KEY_DANMAKU_TEXT_SIZE_SP, value).apply()
+        get() = prefs.getFloat(KEY_DANMAKU_TEXT_SIZE_SP, DANMAKU_TEXT_SIZE_SP_DEFAULT)
+        set(value) = prefs.edit().putFloat(KEY_DANMAKU_TEXT_SIZE_SP, value.coerceIn(DANMAKU_TEXT_SIZE_SP_MIN, DANMAKU_TEXT_SIZE_SP_MAX)).apply()
 
     /** 评论字号（独立于弹幕/界面）。默认 14sp，范围 10..40。 */
     var commentTextSizeSp: Float
         get() = prefs.getFloat(KEY_COMMENT_TEXT_SIZE_SP, COMMENT_TEXT_SIZE_SP_DEFAULT)
-        set(value) = prefs.edit().putFloat(KEY_COMMENT_TEXT_SIZE_SP, value.coerceIn(10f, 40f)).apply()
+        set(value) = prefs.edit().putFloat(KEY_COMMENT_TEXT_SIZE_SP, value.coerceIn(COMMENT_TEXT_SIZE_SP_MIN, COMMENT_TEXT_SIZE_SP_MAX)).apply()
 
     var danmakuLaneDensity: String
         get() {
@@ -505,12 +505,22 @@ class AppPrefs(context: Context) {
 
     var playerSpeed: Float
         get() = prefs.getFloat(KEY_PLAYER_SPEED, 1.0f)
-        set(value) = prefs.edit().putFloat(KEY_PLAYER_SPEED, value).apply()
+        set(value) = prefs.edit().putFloat(KEY_PLAYER_SPEED, value.coerceIn(PLAYBACK_SPEED_MIN, PLAYBACK_SPEED_MAX)).apply()
 
     /** 播放速度模式：fine=细致(0.01 步进) / simple=简单(0.25 步进)，默认细致。 */
     var playbackSpeedMode: String
         get() = normalizePlaybackSpeedMode(prefs.getString(KEY_PLAYBACK_SPEED_MODE, PLAYBACK_SPEED_MODE_FINE))
         set(value) = prefs.edit().putString(KEY_PLAYBACK_SPEED_MODE, normalizePlaybackSpeedMode(value)).apply()
+
+    /** 主页「默认推荐」是否跟随账号兴趣（true=个性化，false=未登录默认推荐）。 */
+    var recommendFollowAccount: Boolean
+        get() = prefs.getBoolean(KEY_RECOMMEND_FOLLOW_ACCOUNT, RECOMMEND_FOLLOW_ACCOUNT_DEFAULT)
+        set(value) = prefs.edit().putBoolean(KEY_RECOMMEND_FOLLOW_ACCOUNT, value).apply()
+
+    /** 主页「热门推荐」是否跟随账号兴趣（true=个性化，false=未登录默认推荐）。 */
+    var popularFollowAccount: Boolean
+        get() = prefs.getBoolean(KEY_POPULAR_FOLLOW_ACCOUNT, POPULAR_FOLLOW_ACCOUNT_DEFAULT)
+        set(value) = prefs.edit().putBoolean(KEY_POPULAR_FOLLOW_ACCOUNT, value).apply()
 
     /** 进度滑动手势灵敏度倍率（0.5~2.0，1.0 为默认）。 */
     var playerSeekSensitivity: Float
@@ -1111,11 +1121,20 @@ class AppPrefs(context: Context) {
         // 播放速度模式
         const val PLAYBACK_SPEED_MODE_FINE = "fine"
         const val PLAYBACK_SPEED_MODE_SIMPLE = "simple"
+        const val PLAYBACK_SPEED_MIN = 0.25f
+        const val PLAYBACK_SPEED_MAX = 4.0f
+
+        // 推荐是否跟随账号
+        const val RECOMMEND_FOLLOW_ACCOUNT_DEFAULT = true
+        const val POPULAR_FOLLOW_ACCOUNT_DEFAULT = true
 
         // 评论字号
         const val COMMENT_TEXT_SIZE_SP_DEFAULT = 14f
         const val COMMENT_TEXT_SIZE_SP_MIN = 10f
         const val COMMENT_TEXT_SIZE_SP_MAX = 40f
+        const val DANMAKU_TEXT_SIZE_SP_DEFAULT = 18f
+        const val DANMAKU_TEXT_SIZE_SP_MIN = 10f
+        const val DANMAKU_TEXT_SIZE_SP_MAX = 60f
 
         // 进度滑动手势灵敏度
         const val PLAYER_SEEK_SENSITIVITY_DEFAULT = 1.0f
@@ -1212,6 +1231,8 @@ class AppPrefs(context: Context) {
         private const val KEY_SUBTITLE_BACKGROUND_OPACITY = "subtitle_background_opacity"
         private const val KEY_PLAYER_SPEED = "player_speed"
         private const val KEY_PLAYBACK_SPEED_MODE = "playback_speed_mode"
+        private const val KEY_RECOMMEND_FOLLOW_ACCOUNT = "recommend_follow_account"
+        private const val KEY_POPULAR_FOLLOW_ACCOUNT = "popular_follow_account"
         private const val KEY_PLAYER_SEEK_SENSITIVITY = "player_seek_sensitivity"
         private const val KEY_TIMER_CUSTOM_LAST_HOURS = "timer_custom_last_hours"
         private const val KEY_TIMER_CUSTOM_LAST_MINUTES = "timer_custom_last_minutes"
@@ -1295,6 +1316,8 @@ class AppPrefs(context: Context) {
 
         /** 重复弹幕整合强度档位（1~5，越大越容易合并）。默认 3。 */
         const val DANMAKU_MERGE_STRENGTH_DEFAULT = 3
+        const val DANMAKU_MERGE_STRENGTH_MIN = 1
+        const val DANMAKU_MERGE_STRENGTH_MAX = 5
 
         private val LEGACY_DANMAKU_AREA_OPTIONS: List<Float> =
             listOf(

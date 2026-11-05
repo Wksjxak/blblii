@@ -37,6 +37,8 @@ internal object PlayerSettingKeys {
     const val PLAYBACK_SPEED = "playback_speed"
     const val SEEK_SENSITIVITY = "seek_sensitivity"
     const val UI_FONT_SCALE = "ui_font_scale"
+    const val RECOMMEND_FOLLOW_ACCOUNT = "recommend_follow_account"
+    const val POPULAR_FOLLOW_ACCOUNT = "popular_follow_account"
     const val AUDIO_BALANCE = "audio_balance"
     const val PLAYBACK_MODE = "playback_mode"
     const val SUBTITLE_MENU = "subtitle_menu"
@@ -348,6 +350,16 @@ internal fun PlayerActivity.handleSettingsItemClick(item: PlayerSettingsAdapter.
         PlayerSettingKeys.PLAYBACK_SPEED -> showSpeedDialog()
         PlayerSettingKeys.UI_FONT_SCALE -> showUiFontScaleDialog()
         PlayerSettingKeys.SEEK_SENSITIVITY -> showSeekSensitivityDialog()
+        PlayerSettingKeys.RECOMMEND_FOLLOW_ACCOUNT -> {
+            BiliClient.prefs.recommendFollowAccount = !BiliClient.prefs.recommendFollowAccount
+            AppToast.show(this, "默认推荐跟随账号：${if (BiliClient.prefs.recommendFollowAccount) "开" else "关"}")
+            refreshSettingsPanel()
+        }
+        PlayerSettingKeys.POPULAR_FOLLOW_ACCOUNT -> {
+            BiliClient.prefs.popularFollowAccount = !BiliClient.prefs.popularFollowAccount
+            AppToast.show(this, "热门推荐跟随账号：${if (BiliClient.prefs.popularFollowAccount) "开" else "关"}")
+            refreshSettingsPanel()
+        }
         PlayerSettingKeys.AUDIO_BALANCE -> showAudioBalanceDialog()
         PlayerSettingKeys.PLAYBACK_MODE -> showPlaybackModeDialog()
         PlayerSettingKeys.SUBTITLE_MENU -> showSubtitleSettingsMenu()
@@ -569,6 +581,16 @@ private fun PlayerActivity.buildRootSettingsItems(
         settingItem(PlayerSettingKeys.PLAYBACK_SPEED, "播放速度", String.format(Locale.US, "%.2fx", session.playbackSpeed)),
         settingItem(PlayerSettingKeys.UI_FONT_SCALE, "界面字体", String.format(Locale.US, "%.2f", BiliClient.prefs.uiFontScale)),
         settingItem(PlayerSettingKeys.SEEK_SENSITIVITY, "进度手势灵敏度", String.format(Locale.US, "%.1fx", BiliClient.prefs.playerSeekSensitivity)),
+        settingItem(
+            PlayerSettingKeys.RECOMMEND_FOLLOW_ACCOUNT,
+            "默认推荐跟随账号",
+            if (BiliClient.prefs.recommendFollowAccount) "开" else "关",
+        ),
+        settingItem(
+            PlayerSettingKeys.POPULAR_FOLLOW_ACCOUNT,
+            "热门推荐跟随账号",
+            if (BiliClient.prefs.popularFollowAccount) "开" else "关",
+        ),
         settingItem(PlayerSettingKeys.PLAYBACK_MODE, "播放模式", playbackModeSubtitle()),
         subtitleSupported.takeIf { it }?.let { settingItem(PlayerSettingKeys.SUBTITLE_MENU, "字幕设置", ">") },
         settingItem(PlayerSettingKeys.DANMAKU_MENU, "弹幕设置", ">"),
@@ -839,7 +861,7 @@ internal fun PlayerActivity.showSpeedDialog() {
         label = { String.format(Locale.US, "%.2fx", it) },
     ) { v ->
         applySessionSettingValue(
-            value = v.coerceIn(0.25f, 4.0f),
+            value = v.coerceIn(AppPrefs.PLAYBACK_SPEED_MIN, AppPrefs.PLAYBACK_SPEED_MAX),
             updateSession = { copy(playbackSpeed = it) },
             syncToGlobal = { playerSpeed = it },
             afterApplied = { player?.setPlaybackSpeed(it) },
@@ -859,7 +881,7 @@ internal fun PlayerActivity.showUiFontScaleDialog() {
         checkedIndex = current,
         label = { String.format(Locale.US, "%.2f", it) },
     ) { v ->
-        BiliClient.prefs.uiFontScale = v.coerceIn(0.80f, 1.30f)
+        BiliClient.prefs.uiFontScale = v.coerceIn(AppPrefs.UI_FONT_SCALE_MIN, AppPrefs.UI_FONT_SCALE_MAX)
     }
 }
 
@@ -875,7 +897,7 @@ internal fun PlayerActivity.showSeekSensitivityDialog() {
         checkedIndex = current,
         label = { String.format(Locale.US, "%.1fx", it) },
     ) { v ->
-        BiliClient.prefs.playerSeekSensitivity = v.coerceIn(0.5f, 2.0f)
+        BiliClient.prefs.playerSeekSensitivity = v.coerceIn(AppPrefs.PLAYER_SEEK_SENSITIVITY_MIN, AppPrefs.PLAYER_SEEK_SENSITIVITY_MAX)
     }
 }
 
@@ -1316,7 +1338,7 @@ internal fun PlayerActivity.showDanmakuAiShieldLevelDialog() {
 /** 弹幕整合强度（1~5，越大越容易合并；1 需要同文本 5 条才合并，5 只要 2 条即合并）。 */
 internal fun PlayerActivity.showDanmakuMergeStrengthDialog() {
     val options = PlaybackSettingChoices.danmakuMergeStrengths
-    val current = options.indexOf(session.danmaku.mergeStrength.coerceIn(1, 5)).takeIf { it >= 0 } ?: 2
+    val current = options.indexOf(session.danmaku.mergeStrength.coerceIn(AppPrefs.DANMAKU_MERGE_STRENGTH_MIN, AppPrefs.DANMAKU_MERGE_STRENGTH_MAX)).takeIf { it >= 0 } ?: 2
     showSettingsChoiceDialog(
         title = "弹幕整合强度",
         options = options,
