@@ -64,13 +64,11 @@ internal object PlayerSettingKeys {
     const val DANMAKU_ALLOW_TOP = "danmaku_allow_top"
     const val DANMAKU_ALLOW_BOTTOM = "danmaku_allow_bottom"
     const val DANMAKU_ALLOW_COLOR = "danmaku_allow_color"
-    const val DANMAKU_ALLOW_SPECIAL = "danmaku_allow_special"
     const val DANMAKU_AREA_INCLUDE_MENU = "danmaku_area_include_menu"
     const val DANMAKU_AREA_INCLUDE_SCROLL = "danmaku_area_include_scroll"
     const val DANMAKU_AREA_INCLUDE_TOP = "danmaku_area_include_top"
     const val DANMAKU_AREA_INCLUDE_BOTTOM = "danmaku_area_include_bottom"
     const val DANMAKU_AREA_INCLUDE_COLOR = "danmaku_area_include_color"
-    const val DANMAKU_AREA_INCLUDE_SPECIAL = "danmaku_area_include_special"
     const val DANMAKU_MERGE_DUPLICATE = "danmaku_merge_duplicate"
     const val DANMAKU_MERGE_STRENGTH = "danmaku_merge_strength"
     const val COMMENT_TEXT_SIZE = "comment_text_size"
@@ -94,8 +92,6 @@ private fun settingItem(
 
 private fun Boolean.switchText(): String = if (this) "开" else "关"
 
-private fun PlayerActivity.shouldPersistPlayerSettingsToGlobal(): Boolean = BiliClient.prefs.playerSettingsApplyToGlobal
-
 internal fun <T> PlayerActivity.applySessionSettingValue(
     value: T,
     updateSession: PlayerSessionSettings.(T) -> PlayerSessionSettings,
@@ -104,9 +100,8 @@ internal fun <T> PlayerActivity.applySessionSettingValue(
     refreshSettingsPanel: Boolean = true,
 ) {
     session = session.updateSession(value)
-    if (shouldPersistPlayerSettingsToGlobal()) {
-        BiliClient.prefs.syncToGlobal(value)
-    }
+    // 播放器内改动直接写回全局：避免「改了只在本次播放生效、下次进视频又变回去」
+    BiliClient.prefs.syncToGlobal(value)
     afterApplied(value)
     if (refreshSettingsPanel) {
         refreshSettingsPanel()
@@ -196,16 +191,15 @@ internal fun PlayerActivity.resolvedSubtitleLangCode(): String {
 
 internal fun PlayerActivity.applyResolutionSetting(qn: Int) {
     session =
-        if (shouldPersistPlayerSettingsToGlobal() && currentVideoIsPortrait != null) {
+        if (currentVideoIsPortrait != null) {
             session.copy(preferredQn = qn, targetQn = 0)
         } else if (qn == session.preferredQn) {
             session.copy(targetQn = 0)
         } else {
             session.copy(targetQn = qn)
         }
-    if (shouldPersistPlayerSettingsToGlobal()) {
-        persistResolutionPreference(BiliClient.prefs, qn)
-    }
+    // 播放器内的选择直接记为默认值，下次打开沿用
+    persistResolutionPreference(BiliClient.prefs, qn)
     val engine = player
     pendingResolutionSuccessHintQn = qn.takeIf { it != session.actualQn }
     AppLog.i(
@@ -233,17 +227,8 @@ internal fun PlayerActivity.applyResolutionSetting(qn: Int) {
 }
 
 internal fun PlayerActivity.applyAudioTrackSetting(id: Int) {
-    session =
-        if (shouldPersistPlayerSettingsToGlobal()) {
-            session.copy(preferAudioId = id, targetAudioId = 0)
-        } else if (id == session.preferAudioId) {
-            session.copy(targetAudioId = 0)
-        } else {
-            session.copy(targetAudioId = id)
-        }
-    if (shouldPersistPlayerSettingsToGlobal()) {
-        BiliClient.prefs.playerPreferredAudioId = id
-    }
+    session = session.copy(preferAudioId = id, targetAudioId = 0)
+    BiliClient.prefs.playerPreferredAudioId = id
     reloadStream(keepPosition = true)
     refreshSettingsPanel()
 }
@@ -254,7 +239,7 @@ internal fun PlayerActivity.applyPlaybackModeSetting(
 ) {
     val normalized = PlayerPlaybackModes.normalize(pickedCode)
     val defaultCode =
-        if (shouldPersistPlayerSettingsToGlobal() && !isPgcLikePlayback()) {
+        if (!isPgcLikePlayback()) {
             normalized
         } else {
             defaultPlaybackModeCode()
@@ -265,9 +250,7 @@ internal fun PlayerActivity.applyPlaybackModeSetting(
         } else {
             session.copy(playbackModeOverride = normalized)
         }
-    if (shouldPersistPlayerSettingsToGlobal()) {
-        BiliClient.prefs.playerPlaybackMode = normalized
-    }
+    BiliClient.prefs.playerPlaybackMode = normalized
     applyPlaybackMode(engine)
     updatePlaylistControls()
     refreshSettingsPanel()
@@ -305,14 +288,12 @@ internal fun PlayerActivity.applySubtitleLanguageSetting(
     val normalized = pickedCode.trim().ifBlank { "auto" }
     val defaultCode = defaultSubtitleLangCode()
     session =
-        if (shouldPersistPlayerSettingsToGlobal() || normalized.equals(defaultCode, ignoreCase = true)) {
+        if (normalized.equals(defaultCode, ignoreCase = true)) {
             session.copy(subtitleLangOverride = null)
         } else {
             session.copy(subtitleLangOverride = normalized)
         }
-    if (shouldPersistPlayerSettingsToGlobal()) {
-        BiliClient.prefs.subtitlePreferredLang = normalized
-    }
+    BiliClient.prefs.subtitlePreferredLang = normalized
     refreshSettingsPanel()
     lifecycleScope.launch {
         subtitleConfig = buildSubtitleConfigFromCurrentSelection(bvid = currentBvid, cid = currentCid)
@@ -462,12 +443,6 @@ internal fun PlayerActivity.handleSettingsItemClick(item: PlayerSettingsAdapter.
                 current = session.danmaku.areaIncludeColor,
                 updateDanmaku = { copy(areaIncludeColor = it) },
                 syncToGlobal = { danmakuAreaIncludeColor = it },
-            )
-        PlayerSettingKeys.DANMAKU_AREA_INCLUDE_SPECIAL ->
-            toggleDanmakuReloadSettingFlag(
-                current = session.danmaku.areaIncludeSpecial,
-                updateDanmaku = { copy(areaIncludeSpecial = it) },
-                syncToGlobal = { danmakuAreaIncludeSpecial = it },
             )
         PlayerSettingKeys.DEBUG_INFO ->
             toggleSessionSettingFlag(
@@ -662,7 +637,6 @@ internal fun PlayerActivity.danmakuAreaIncludeSummary(): String {
             if (!d.areaIncludeTop) add("顶部")
             if (!d.areaIncludeBottom) add("底部")
             if (!d.areaIncludeColor) add("彩色")
-            if (!d.areaIncludeSpecial) add("特殊")
         }
     return if (notIncluded.isEmpty()) "全部计入" else "不计入：" + notIncluded.joinToString("、")
 }

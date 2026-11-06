@@ -16,7 +16,6 @@ internal object PlayerAreaIncludeKeys {
     const val TOP = "area_include_top"
     const val BOTTOM = "area_include_bottom"
     const val COLOR = "area_include_color"
-    const val SPECIAL = "area_include_special"
 }
 
 internal fun PlayerActivity.isAreaIncludePanelVisible(): Boolean =
@@ -41,8 +40,6 @@ internal fun PlayerActivity.handleAreaIncludeItemClick(key: String) {
             toggleAreaInclude(d.areaIncludeBottom, { copy(areaIncludeBottom = it) }, { danmakuAreaIncludeBottom = it })
         PlayerAreaIncludeKeys.COLOR ->
             toggleAreaInclude(d.areaIncludeColor, { copy(areaIncludeColor = it) }, { danmakuAreaIncludeColor = it })
-        PlayerAreaIncludeKeys.SPECIAL ->
-            toggleAreaInclude(d.areaIncludeSpecial, { copy(areaIncludeSpecial = it) }, { danmakuAreaIncludeSpecial = it })
     }
 }
 
@@ -93,13 +90,6 @@ internal fun PlayerActivity.refreshAreaIncludeItems() {
                     key = PlayerAreaIncludeKeys.COLOR,
                     title = "彩色弹幕",
                     subtitle = areaIncludeSwitchText(d.areaIncludeColor),
-                ),
-            )
-            add(
-                PlayerSettingsAdapter.SettingItem(
-                    key = PlayerAreaIncludeKeys.SPECIAL,
-                    title = "特殊弹幕",
-                    subtitle = areaIncludeSwitchText(d.areaIncludeSpecial),
                 ),
             )
         }

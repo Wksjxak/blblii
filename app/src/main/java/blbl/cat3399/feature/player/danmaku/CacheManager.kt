@@ -34,7 +34,6 @@ internal data class CacheStyle(
     val outlinePadPx: Float,
     val showHighLikeIcon: Boolean,
     val generation: Int,
-    val specialScale: Float = 1f,
 )
 
 internal class CacheManager(
@@ -202,8 +201,7 @@ internal class CacheManager(
         if (fill.typeface != desiredTypeface) fill.typeface = desiredTypeface
         if (stroke.typeface != desiredTypeface) stroke.typeface = desiredTypeface
 
-        val textScale = if (isHighlightDanmaku(item.data)) style.specialScale else 1f
-        val textSize = style.textSizePx * textScale
+        val textSize = style.textSizePx
         fill.textSize = textSize
         stroke.textSize = textSize
         stroke.strokeWidth = strokeWidth

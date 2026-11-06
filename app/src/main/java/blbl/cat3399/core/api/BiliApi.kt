@@ -182,7 +182,6 @@ object BiliApi {
         val allowTop: Boolean,
         val allowBottom: Boolean,
         val allowColor: Boolean,
-        val allowSpecial: Boolean,
         val aiEnabled: Boolean,
         val aiLevel: Int,
     )

@@ -7,7 +7,6 @@ data class DanmakuShield(
     val allowTop: Boolean = true,
     val allowBottom: Boolean = true,
     val allowColor: Boolean = true,
-    val allowSpecial: Boolean = true,
     val aiEnabled: Boolean = false,
     val aiLevel: Int = 3,
     val keywords: List<String> = emptyList(),
@@ -21,7 +20,7 @@ data class DanmakuShield(
             4 -> allowBottom
             5 -> allowTop
             7, 8, 9 -> false
-            else -> allowSpecial
+            else -> true
         }
         if (!typeAllowed) return false
 

@@ -421,7 +421,11 @@ class VideoDetailActivity : BaseActivity() {
                         val favCount = detail.stat.favorite
                         metaText =
                             buildList {
-                                pubDate?.let { Format.pubDateText(it) }.takeIf { !it.isNullOrBlank() }?.let(::add)
+                                // 详情页（简介）同样显示精确到分钟的时间，与播放器标题下保持一致
+                                pubDate
+                                    ?.let { Format.pubDateTimeText(it).ifBlank { Format.pubDateText(it) } }
+                                    .takeIf { !it.isNullOrBlank() }
+                                    ?.let(::add)
                                 viewCount?.let { "${Format.count(it)}观看" }?.let(::add)
                                 likeCount?.let { "${Format.count(it)}赞" }?.let(::add)
                                 coinCount?.let { "${Format.count(it)}投币" }?.let(::add)

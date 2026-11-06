@@ -215,10 +215,6 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_DANMAKU_ALLOW_COLOR, true)
         set(value) = prefs.edit().putBoolean(KEY_DANMAKU_ALLOW_COLOR, value).apply()
 
-    var danmakuAllowSpecial: Boolean
-        get() = prefs.getBoolean(KEY_DANMAKU_ALLOW_SPECIAL, true)
-        set(value) = prefs.edit().putBoolean(KEY_DANMAKU_ALLOW_SPECIAL, value).apply()
-
     var danmakuAreaIncludeScroll: Boolean
         get() = prefs.getBoolean(KEY_DANMAKU_AREA_INCLUDE_SCROLL, true)
         set(value) = prefs.edit().putBoolean(KEY_DANMAKU_AREA_INCLUDE_SCROLL, value).apply()
@@ -234,10 +230,6 @@ class AppPrefs(context: Context) {
     var danmakuAreaIncludeColor: Boolean
         get() = prefs.getBoolean(KEY_DANMAKU_AREA_INCLUDE_COLOR, true)
         set(value) = prefs.edit().putBoolean(KEY_DANMAKU_AREA_INCLUDE_COLOR, value).apply()
-
-    var danmakuAreaIncludeSpecial: Boolean
-        get() = prefs.getBoolean(KEY_DANMAKU_AREA_INCLUDE_SPECIAL, true)
-        set(value) = prefs.edit().putBoolean(KEY_DANMAKU_AREA_INCLUDE_SPECIAL, value).apply()
 
     var danmakuMergeDuplicate: Boolean
         get() = prefs.getBoolean(KEY_DANMAKU_MERGE_DUPLICATE, true)
@@ -947,10 +939,6 @@ class AppPrefs(context: Context) {
         get() = PlayerPlaybackModes.normalize(prefs.getString(KEY_PLAYER_PLAYBACK_MODE, PLAYER_PLAYBACK_MODE_NONE))
         set(value) = prefs.edit().putString(KEY_PLAYER_PLAYBACK_MODE, PlayerPlaybackModes.normalize(value)).apply()
 
-    var playerSettingsApplyToGlobal: Boolean
-        get() = prefs.getBoolean(KEY_PLAYER_SETTINGS_APPLY_TO_GLOBAL, false)
-        set(value) = prefs.edit().putBoolean(KEY_PLAYER_SETTINGS_APPLY_TO_GLOBAL, value).apply()
-
     var playerUpQuickCardEnabled: Boolean
         get() = prefs.getBoolean(KEY_PLAYER_UP_QUICK_CARD_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_UP_QUICK_CARD_ENABLED, value).apply()
@@ -1273,12 +1261,10 @@ class AppPrefs(context: Context) {
         private const val KEY_DANMAKU_ALLOW_BOTTOM = "danmaku_allow_bottom"
         private const val KEY_DANMAKU_ALLOW_SCROLL = "danmaku_allow_scroll"
         private const val KEY_DANMAKU_ALLOW_COLOR = "danmaku_allow_color"
-        private const val KEY_DANMAKU_ALLOW_SPECIAL = "danmaku_allow_special"
         private const val KEY_DANMAKU_AREA_INCLUDE_SCROLL = "danmaku_area_include_scroll"
         private const val KEY_DANMAKU_AREA_INCLUDE_TOP = "danmaku_area_include_top"
         private const val KEY_DANMAKU_AREA_INCLUDE_BOTTOM = "danmaku_area_include_bottom"
         private const val KEY_DANMAKU_AREA_INCLUDE_COLOR = "danmaku_area_include_color"
-        private const val KEY_DANMAKU_AREA_INCLUDE_SPECIAL = "danmaku_area_include_special"
         private const val KEY_DANMAKU_MERGE_DUPLICATE = "danmaku_merge_duplicate"
         private const val KEY_DANMAKU_MERGE_STRENGTH = "danmaku_merge_strength"
         private const val KEY_DANMAKU_AI_ENABLED = "danmaku_ai_enabled"
@@ -1348,7 +1334,6 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_VIDEOSHOT_PREVIEW_SIZE = "player_videoshot_preview_size"
         private const val KEY_PLAYER_AUDIO_BALANCE_LEVEL = "player_audio_balance_level"
         private const val KEY_PLAYER_PLAYBACK_MODE = "player_playback_mode"
-        private const val KEY_PLAYER_SETTINGS_APPLY_TO_GLOBAL = "player_settings_apply_to_global"
         private const val KEY_PLAYER_UP_QUICK_CARD_ENABLED = "player_up_quick_card_enabled"
         private const val KEY_PLAYER_OSD_BUTTONS = "player_osd_buttons"
         private const val KEY_PLAYER_OSD_BUTTONS_DETAIL_MIGRATED = "player_osd_buttons_detail_migrated"

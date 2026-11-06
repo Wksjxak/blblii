@@ -191,7 +191,6 @@ internal fun PlayerSessionSettings.toEngineSwitchJsonString(): String {
             put("danmakuAreaIncludeTop", danmaku.areaIncludeTop)
             put("danmakuAreaIncludeBottom", danmaku.areaIncludeBottom)
             put("danmakuAreaIncludeColor", danmaku.areaIncludeColor)
-            put("danmakuAreaIncludeSpecial", danmaku.areaIncludeSpecial)
             put("danmakuMergeDuplicate", danmaku.mergeDuplicateEnabled)
             put("debugEnabled", debugEnabled)
             put("engineKind", engineKind.prefValue)
@@ -260,7 +259,6 @@ internal fun PlayerSessionSettings.restoreFromEngineSwitchJsonString(raw: String
     val danAreaIncludeTop = obj.optBoolean("danmakuAreaIncludeTop", danmaku.areaIncludeTop)
     val danAreaIncludeBottom = obj.optBoolean("danmakuAreaIncludeBottom", danmaku.areaIncludeBottom)
     val danAreaIncludeColor = obj.optBoolean("danmakuAreaIncludeColor", danmaku.areaIncludeColor)
-    val danAreaIncludeSpecial = obj.optBoolean("danmakuAreaIncludeSpecial", danmaku.areaIncludeSpecial)
     val danMergeDuplicate = obj.optBoolean("danmakuMergeDuplicate", danmaku.mergeDuplicateEnabled)
     val dbg = obj.optBoolean("debugEnabled", debugEnabled)
     val restoredEngineKind = PlayerEngineKind.fromPrefValue(obj.optString("engineKind", engineKind.prefValue))
@@ -296,7 +294,6 @@ internal fun PlayerSessionSettings.restoreFromEngineSwitchJsonString(raw: String
                 areaIncludeTop = danAreaIncludeTop,
                 areaIncludeBottom = danAreaIncludeBottom,
                 areaIncludeColor = danAreaIncludeColor,
-                areaIncludeSpecial = danAreaIncludeSpecial,
                 mergeDuplicateEnabled = danMergeDuplicate,
             ),
         debugEnabled = dbg,

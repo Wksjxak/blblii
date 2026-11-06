@@ -68,7 +68,6 @@ enum class SettingId(
     PlayerAutoSkipServerBaseUrl("player_auto_skip_server_base_url"),
     PlayerOpenDetailBeforePlay("player_open_detail_before_play"),
     PlayerPlaybackMode("player_playback_mode"),
-    PlayerSettingsApplyToGlobal("player_settings_apply_to_global"),
     PlayerUpQuickCardEnabled("player_up_quick_card_enabled"),
     PlayerStyle("player_style"),
     SubtitlePreferredLang("subtitle_preferred_lang"),
@@ -110,6 +109,7 @@ enum class SettingId(
     DanmakuAllowTop("danmaku_allow_top"),
     DanmakuAllowBottom("danmaku_allow_bottom"),
     DanmakuAllowColor("danmaku_allow_color"),
+    DanmakuMergeDuplicate("danmaku_merge_duplicate"),
     DanmakuMergeStrength("danmaku_merge_strength"),
 
     // 关于应用

@@ -1196,6 +1196,11 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.DanmakuMergeDuplicate -> {
+                prefs.danmakuMergeDuplicate = !prefs.danmakuMergeDuplicate
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.DanmakuMergeStrength -> {
                 val options = PlaybackSettingChoices.danmakuMergeStrengths.map(Int::toString)
                 showChoiceDialog(
@@ -1473,11 +1478,6 @@ class SettingsInteractionHandler(
                     prefs.playerPlaybackMode = modeCodes.getOrElse(selectedIndex) { AppPrefs.PLAYER_PLAYBACK_MODE_NONE }
                     renderer.refreshSection(entry.id)
                 }
-            }
-
-            SettingId.PlayerSettingsApplyToGlobal -> {
-                prefs.playerSettingsApplyToGlobal = !prefs.playerSettingsApplyToGlobal
-                renderer.refreshSection(entry.id)
             }
 
             SettingId.PlayerUpQuickCardEnabled -> {

@@ -698,7 +698,6 @@ internal object VideoApi {
                     allowTop = s.blocktop,
                     allowBottom = s.blockbottom,
                     allowColor = s.blockcolor,
-                    allowSpecial = s.blockspecial,
                     aiEnabled = s.aiSwitch,
                     aiLevel = aiLevel,
                 )

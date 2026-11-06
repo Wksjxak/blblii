@@ -361,7 +361,7 @@ class SettingsRenderer(
                         SettingsText.playbackSpeedModeText(prefs.playbackSpeedMode),
                         "细致=0.01 步进；简单=0.25 步进",
                     ),
-                    SettingEntry(SettingId.PlayerSeekSensitivity, "进度手势灵敏度", String.format(java.util.Locale.US, "%.1fx", prefs.playerSeekSensitivity), "越大越灵敏"),
+                    SettingEntry(SettingId.PlayerSeekSensitivity, "进度手势灵敏度", String.format(java.util.Locale.US, "%.1fx", prefs.playerSeekSensitivity), "触摸拖动时越大越灵敏"),
                     SettingEntry(
                         SettingId.PlayerShortSeekStepSeconds,
                         "点按快进秒数",
@@ -370,19 +370,28 @@ class SettingsRenderer(
                     ),
                     SettingEntry(
                         SettingId.PlayerHoldSeekSpeed,
-                        "长按快进倍率",
+                        "长按倍速档位",
                         String.format(java.util.Locale.US, "%.2fx", prefs.playerHoldSeekSpeed),
-                        null,
+                        // 倍率只在「倍速」方式下参与计算，拖动/固定步进用的是下面的时长与步长
+                        if (prefs.playerHoldSeekMode == AppPrefs.PLAYER_HOLD_SEEK_MODE_SPEED) {
+                            "仅在「倍速」方式生效"
+                        } else {
+                            "当前方式是「${SettingsText.holdSeekModeText(prefs.playerHoldSeekMode)}」，此项不生效"
+                        },
                     ),
                     SettingEntry(
                         SettingId.PlayerHoldSeekSpeedMode,
-                        "长按快进倍率模式",
+                        "长按倍速档位模式",
                         if (prefs.playerHoldSeekSpeedMode == AppPrefs.PLAYER_HOLD_SEEK_SPEED_MODE_FINE) {
                             "细致（0.1 步进）"
                         } else {
                             "简单（0.5 步进）"
                         },
-                        null,
+                        if (prefs.playerHoldSeekMode == AppPrefs.PLAYER_HOLD_SEEK_MODE_SPEED) {
+                            "仅在「倍速」方式生效"
+                        } else {
+                            "当前方式是「${SettingsText.holdSeekModeText(prefs.playerHoldSeekMode)}」，此项不生效"
+                        },
                     ),
                     SettingEntry(
                         SettingId.PlayerProgressDisplayMode,
@@ -396,18 +405,26 @@ class SettingsRenderer(
                         "${prefs.progressPercentDecimals} 位",
                         "仅百分比样式下生效",
                     ),
-                    SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进模式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),
+                    SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进方式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),
                     SettingEntry(
                         SettingId.PlayerHoldScrubTraverseSeconds,
                         "拖完整个视频所需时间",
                         SettingsText.seekStepSecondsText(prefs.playerHoldScrubTraverseSeconds),
-                        null,
+                        if (prefs.playerHoldSeekMode == AppPrefs.PLAYER_HOLD_SEEK_MODE_SCRUB) {
+                            "仅「拖动」方式生效"
+                        } else {
+                            "当前方式是「${SettingsText.holdSeekModeText(prefs.playerHoldSeekMode)}」，此项不生效"
+                        },
                     ),
                     SettingEntry(
                         SettingId.PlayerHoldScrubFixedStepSeconds,
                         "固定时间拖动进度条间隔",
                         SettingsText.seekStepSecondsText(prefs.playerHoldScrubFixedStepSeconds),
-                        null,
+                        if (prefs.playerHoldSeekMode == AppPrefs.PLAYER_HOLD_SEEK_MODE_SCRUB_FIXED_TIME) {
+                            "仅「固定步进」方式生效"
+                        } else {
+                            "当前方式是「${SettingsText.holdSeekModeText(prefs.playerHoldSeekMode)}」，此项不生效"
+                        },
                     ),
                     SettingEntry(SettingId.PlayerAutoResumeEnabled, "自动跳到上次播放位置", if (prefs.playerAutoResumeEnabled) "开" else "关", null),
                     SettingEntry(
@@ -436,12 +453,6 @@ class SettingsRenderer(
                     ),
                     SettingEntry(SettingId.PlayerOpenDetailBeforePlay, "播放前打开详情页", if (prefs.playerOpenDetailBeforePlay) "开" else "关", null),
                     SettingEntry(SettingId.PlayerPlaybackMode, "播放模式", SettingsText.playbackModeText(prefs.playerPlaybackMode), null),
-                    SettingEntry(
-                        SettingId.PlayerSettingsApplyToGlobal,
-                        "播放器设置应用到全局",
-                        if (prefs.playerSettingsApplyToGlobal) "开" else "关",
-                        null,
-                    ),
                     SettingEntry(SettingId.SubtitlePreferredLang, "字幕语言", SettingsText.subtitleLangText(prefs.subtitlePreferredLang), null),
                     SettingEntry(SettingId.SubtitleTextSizeSp, "字幕字体大小", prefs.subtitleTextSizeSp.toInt().toString(), null),
                     SettingEntry(
@@ -549,6 +560,7 @@ class SettingsRenderer(
                     SettingEntry(SettingId.DanmakuAllowTop, "允许顶部悬停弹幕", if (prefs.danmakuAllowTop) "开" else "关", null),
                     SettingEntry(SettingId.DanmakuAllowBottom, "允许底部悬停弹幕", if (prefs.danmakuAllowBottom) "开" else "关", null),
                     SettingEntry(SettingId.DanmakuAllowColor, "允许彩色弹幕", if (prefs.danmakuAllowColor) "开" else "关", null),
+                    SettingEntry(SettingId.DanmakuMergeDuplicate, "重复弹幕整合", if (prefs.danmakuMergeDuplicate) "开" else "关", "关闭后不再合并同文本弹幕"),
                     SettingEntry(
                         SettingId.DanmakuMergeStrength,
                         "弹幕整合强度",

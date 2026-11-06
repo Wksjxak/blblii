@@ -54,7 +54,6 @@ data class DanmakuConfig(
     val areaIncludeTop: Boolean = true,
     val areaIncludeBottom: Boolean = true,
     val areaIncludeColor: Boolean = true,
-    val areaIncludeSpecial: Boolean = true,
     val mergeDuplicateEnabled: Boolean = true,
     val mergeStrength: Int = AppPrefs.DANMAKU_MERGE_STRENGTH_DEFAULT,
 )
@@ -76,12 +75,10 @@ data class DanmakuSessionSettings(
     val allowTop: Boolean = true,
     val allowBottom: Boolean = true,
     val allowColor: Boolean = true,
-    val allowSpecial: Boolean = true,
     val areaIncludeScroll: Boolean = true,
     val areaIncludeTop: Boolean = true,
     val areaIncludeBottom: Boolean = true,
     val areaIncludeColor: Boolean = true,
-    val areaIncludeSpecial: Boolean = true,
     val mergeDuplicateEnabled: Boolean = true,
     val mergeStrength: Int = AppPrefs.DANMAKU_MERGE_STRENGTH_DEFAULT,
 ) {
@@ -100,17 +97,12 @@ data class DanmakuSessionSettings(
             areaIncludeTop = areaIncludeTop,
             areaIncludeBottom = areaIncludeBottom,
             areaIncludeColor = areaIncludeColor,
-            areaIncludeSpecial = areaIncludeSpecial,
             mergeDuplicateEnabled = mergeDuplicateEnabled,
             mergeStrength = mergeStrength,
         )
 }
 
-/** 特殊弹幕字号放大系数（历史常量，特殊弹幕现已整体不渲染）。 */
-internal const val SPECIAL_DANMAKU_SCALE = 1.5f
-
 /**
- * 定制版：高级弹幕（mode 7~9）在数据源与引擎两处均被过滤，不再渲染；
+ * 定制版：高级/特殊弹幕（mode 7~9）在数据源与引擎两处均被过滤，不再渲染；
  * 普通弹幕即使文本包含「前方高能」等关键词，也不再放大字号或加底色，统一按普通弹幕显示。
  */
-internal fun isHighlightDanmaku(d: Danmaku): Boolean = d.mode in 7..9

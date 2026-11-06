@@ -178,10 +178,6 @@ internal class DanmakuEngine(
     }
     private val emotePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
     private val emotePlaceholderFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val highlightBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = 0x4DFF9900
-    }
     private val emotePlaceholderStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = max(1f, density) // ~1dp
@@ -440,23 +436,6 @@ internal class DanmakuEngine(
                 }
             val yTop = snapshot.yTop[i]
             val bmp = item.cacheBitmap
-            if (isHighlightDanmaku(item.data)) {
-                val pad = 4f
-                val hw = item.textWidthPx + pad * 2f
-                val hlSize = emoteSizePx * SPECIAL_DANMAKU_SCALE
-                val hh =
-                    (item.measuredHeightPx.takeIf { !it.isNaN() && it > 0f } ?: hlSize) +
-                        pad * 2f
-                canvas.drawRoundRect(
-                    x - pad,
-                    yTop - pad,
-                    x + hw - pad,
-                    yTop + hh - pad,
-                    8f,
-                    8f,
-                    highlightBgPaint,
-                )
-            }
             if (bmp != null && !bmp.isRecycled && item.cacheGeneration == styleGen) {
                 canvas.drawBitmap(bmp, x, yTop, bitmapPaint)
                 cachedDrawn++
@@ -994,7 +973,6 @@ internal class DanmakuEngine(
                 outlinePadPx = outlinePad,
                 showHighLikeIcon = cfg.showHighLikeIcon,
                 generation = cacheStyleGeneration,
-                specialScale = SPECIAL_DANMAKU_SCALE,
             )
         val releaseAtFrameId = currentUiFrameId + 1
         val scanCount = min(active.size, MAX_CACHE_SCAN_PER_FRAME)
@@ -1181,14 +1159,11 @@ internal class DanmakuEngine(
             }
         if (!posOk) return false
         if (isColorDanmaku(d) && !c.areaIncludeColor) return false
-        if (isSpecialDanmaku(d) && !c.areaIncludeSpecial) return false
         return true
     }
 
     private fun isColorDanmaku(d: Danmaku): Boolean =
         d.color != 0 && d.color != 0xFFFFFF && d.color != 0xFFFFFFFF.toInt()
-
-    private fun isSpecialDanmaku(d: Danmaku): Boolean = d.mode in 7..9
 
     /**
      * 重复弹幕整合：滚动/逆向滚动弹幕按文本合并，显示「文本×数量」，数量随时间随同文本到达数递增。
@@ -1226,9 +1201,7 @@ internal class DanmakuEngine(
             return item.measuredWidthPx
         }
         val text = item.data.text
-        val special = isHighlightDanmaku(item.data)
         val oldTs = actionPaint.textSize
-        if (special) actionPaint.textSize = textSizePx * SPECIAL_DANMAKU_SCALE
         val width =
             try {
                 if (text.isBlank()) {
