@@ -246,15 +246,8 @@ internal fun PlayerActivity.maybeTickAutoSkipSegments(posMs: Long) {
             dismissAutoSkipHint()
             return
         }
-
-        val durationMs = exo.duration.takeIf { it > 0 }
-        val targetMs = durationMs?.let { seg.endMs.coerceIn(0L, (it - 500L).coerceAtLeast(0L)) } ?: seg.endMs
-        autoSkipHandledSegmentIds.add(seg.id)
         autoSkipPending = null
-        dismissAutoSkipHint()
-        trace?.log("skipseg:seek", "to=${targetMs}ms id=${seg.id} cat=${seg.category ?: ""} src=${seg.source}")
-        exo.seekTo(targetMs)
-        showSeekHint("已跳过${autoSkipCategoryLabel(seg.category)}片段", hold = false)
+        performAutoSkipSegments(seg = seg, posMs = posMs)
         return
     }
 
@@ -262,14 +255,39 @@ internal fun PlayerActivity.maybeTickAutoSkipSegments(posMs: Long) {
     val windowEndMs = posMs + PlayerActivity.AUTO_SKIP_START_WINDOW_MS
     val candidate = findAutoSkipCandidate(autoSkipSegments, autoSkipHandledSegmentIds, posMs, windowEndMs) ?: return
 
+    // 0 秒：不显示「将要跳过…按返回取消」提示，命中片段立即跳过。
+    val delaySeconds = BiliClient.prefs.playerAutoSkipDelaySeconds
+    if (delaySeconds <= 0) {
+        performAutoSkipSegments(seg = candidate, posMs = posMs)
+        return
+    }
+
     autoSkipPending =
         PendingAutoSkip(
             token = autoSkipToken,
             segment = candidate,
-            dueAtElapsedMs = now + BiliClient.prefs.playerAutoSkipDelaySeconds * 1000L,
+            dueAtElapsedMs = now + delaySeconds * 1000L,
         )
     trace?.log("skipseg:pending", "id=${candidate.id} cat=${candidate.category ?: ""} src=${candidate.source}")
     showAutoSkipHint(candidate)
+}
+
+/** 执行一次片段跳过：校验位置有效后跳到片段结尾并提示。 */
+internal fun PlayerActivity.performAutoSkipSegments(seg: SkipSegment, posMs: Long) {
+    val exo = player ?: return
+    if (posMs < seg.startMs) return
+    if (posMs >= seg.endMs) {
+        dismissAutoSkipHint()
+        return
+    }
+    val durationMs = exo.duration.takeIf { it > 0 }
+    val targetMs = durationMs?.let { seg.endMs.coerceIn(0L, (it - 500L).coerceAtLeast(0L)) } ?: seg.endMs
+    autoSkipHandledSegmentIds.add(seg.id)
+    autoSkipPending = null
+    dismissAutoSkipHint()
+    trace?.log("skipseg:seek", "to=${targetMs}ms id=${seg.id} cat=${seg.category ?: ""} src=${seg.source}")
+    exo.seekTo(targetMs)
+    showSeekHint("已跳过${autoSkipCategoryLabel(seg.category)}片段", hold = false)
 }
 
 internal fun PlayerActivity.maybeStartAutoSkipSegments(
