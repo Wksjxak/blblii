@@ -609,9 +609,9 @@
             android:maxLines="1"
             android:textColor="?attr/colorOnSurface"
             android:textSize="@dimen/player_time_text_size"
-            app:layout_constraintBottom_toBottomOf="@id/controls_row"
+            app:layout_constraintBottom_toBottomOf="@id/controls_scroll"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@id/controls_row" />
+            app:layout_constraintTop_toTopOf="@id/controls_scroll" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <blbl.cat3399.feature.player.SegmentedProgressBar
