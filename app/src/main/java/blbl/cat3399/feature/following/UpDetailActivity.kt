@@ -3,7 +3,10 @@ package blbl.cat3399.feature.following
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.KeyEvent
+import android.view.inputmethod.InputMethodManager
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -51,6 +54,8 @@ import com.google.android.material.R as MaterialR
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class UpDetailActivity : BaseActivity() {
@@ -81,6 +86,18 @@ class UpDetailActivity : BaseActivity() {
     private var archiveEndReached: Boolean = false
     private var archiveNextPage: Int = 1
     private var archiveRequestToken: Int = 0
+
+    // 浏览态（未搜索）的原始投稿与展示列表，搜索退出时用来还原列表
+    private val archiveBrowseItems = ArrayList<VideoCard>()
+    private val archiveBrowseKeys = HashSet<String>()
+    private val archiveVisibleItems = ArrayList<VideoCard>()
+
+    private var archiveSearchQuery: String = ""
+    private var archiveSearchDebounceJob: Job? = null
+    private var archiveSearchController: UpArchiveSearchController? = null
+    private var archiveSearchUi: UpArchiveSearchController.Ui? = null
+    private var archiveSearchSubmittedQuery: String = ""
+    private var archiveSearchSubmittedCount: Int = 0
 
     private val seasonsSeriesSections = ArrayList<UpDetailSection>()
     private val loadedSectionStableIds = HashSet<String>()
@@ -129,6 +146,7 @@ class UpDetailActivity : BaseActivity() {
         setupAppBar()
         setupAdapters()
         setupTabs()
+        setupArchiveSearch()
 
         binding.recycler.setHasFixedSize(true)
         (binding.recycler.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
@@ -156,7 +174,10 @@ class UpDetailActivity : BaseActivity() {
 
         if (currentTab == UpTab.ARCHIVE) {
             archiveLayoutManager.spanCount = spanCountForWidth()
-            if (!binding.swipeRefresh.isRefreshing && archiveAdapter.itemCount == 0) {
+            if (archiveSearchQuery.isBlank() &&
+                !binding.swipeRefresh.isRefreshing &&
+                archiveAdapter.itemCount == 0
+            ) {
                 resetAndLoadArchive()
             }
         } else {
@@ -179,6 +200,16 @@ class UpDetailActivity : BaseActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // 搜索态按一次返回：先清空搜索回到正常列表，再按才退出页面
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            event.repeatCount == 0 &&
+            event.keyCode == KeyEvent.KEYCODE_BACK &&
+            currentTab == UpTab.ARCHIVE &&
+            archiveSearchQuery.isNotBlank()
+        ) {
+            clearArchiveSearch()
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && RemoteKeys.isRefreshKey(event.keyCode)) {
             if (binding.swipeRefresh.isRefreshing) return true
             refreshCurrentTab()
@@ -387,6 +418,183 @@ class UpDetailActivity : BaseActivity() {
         }
     }
 
+    private fun setupArchiveSearch() {
+        archiveSearchController =
+            UpArchiveSearchController(
+                scope = lifecycleScope,
+                mid = mid,
+                onUi = ::onArchiveSearchUi,
+            )
+
+        binding.etArchiveSearch.addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+
+                override fun afterTextChanged(s: Editable?) {
+                    val q = s?.toString().orEmpty()
+                    if (q == archiveSearchQuery) return
+                    archiveSearchQuery = q
+                    binding.btnArchiveSearchClear.isVisible = q.isNotEmpty()
+                    scheduleArchiveSearch(q)
+                }
+            },
+        )
+        binding.etArchiveSearch.setOnEditorActionListener { _, _, _ ->
+            hideArchiveSearchKeyboard()
+            focusArchiveFirstItemOrGrid()
+            true
+        }
+        binding.etArchiveSearch.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    focusSelectedTab()
+                    true
+                }
+
+                KeyEvent.KEYCODE_DPAD_DOWN -> focusArchiveFirstItemOrGrid() || false
+
+                else -> false
+            }
+        }
+
+        binding.btnArchiveSearchClear.isFocusable = true
+        binding.btnArchiveSearchClear.setOnClickListener { clearArchiveSearch() }
+        binding.btnArchiveSearchClear.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    focusSelectedTab()
+                    true
+                }
+
+                KeyEvent.KEYCODE_DPAD_DOWN -> focusArchiveFirstItemOrGrid() || false
+
+                else -> false
+            }
+        }
+
+        binding.llArchiveSearch.isVisible = currentTab == UpTab.ARCHIVE
+    }
+
+    private fun clearArchiveSearch() {
+        // setText 会同步触发 TextWatcher，清空与退出搜索都在那条路径里完成
+        if (binding.etArchiveSearch.text.toString().isEmpty()) {
+            exitArchiveSearch()
+        } else {
+            binding.etArchiveSearch.setText("")
+        }
+        binding.etArchiveSearch.requestFocus()
+    }
+
+    private fun focusArchiveFirstItemOrGrid(): Boolean {
+        if (archiveAdapter.itemCount <= 0) return false
+        focusGridAt(0)
+        return true
+    }
+
+    private fun hideArchiveSearchKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(binding.etArchiveSearch.windowToken, 0)
+    }
+
+    /** 输入防抖：停手 220ms 才真正发起搜索，避免遥控器每敲一个字母就打一次接口。 */
+    private fun scheduleArchiveSearch(rawQuery: String) {
+        archiveSearchDebounceJob?.cancel()
+        archiveSearchDebounceJob = null
+        val q = rawQuery.trim()
+        if (q.isEmpty()) {
+            exitArchiveSearch()
+            return
+        }
+        binding.tvArchiveSearchStatus.isVisible = true
+        binding.tvArchiveSearchStatus.text = "正在搜索…"
+        archiveSearchDebounceJob =
+            lifecycleScope.launch {
+                delay(220)
+                if (q != archiveSearchQuery.trim()) return@launch
+                startArchiveSearch(q)
+            }
+    }
+
+    private fun startArchiveSearch(query: String) {
+        // 已加载的投稿先交给控制器做「秒出」过滤，网络结果回来再合并；
+        // 拼音模式从「已覆盖过的整页」之后开始扫，避免重复请求同一批投稿
+        val preloaded = archiveBrowseItems.toList()
+        val coveredPages = preloaded.size / 50
+        archiveSearchController?.start(query, preloaded, scanStartPage = coveredPages + 1)
+        archiveGridController?.clearPendingFocusAfterLoadMore()
+    }
+
+    private fun exitArchiveSearch() {
+        archiveSearchController?.cancel()
+        archiveSearchUi = null
+        archiveSearchSubmittedQuery = ""
+        archiveSearchSubmittedCount = 0
+        binding.tvArchiveSearchStatus.isVisible = false
+        binding.tvArchiveSearchStatus.text = ""
+        if (currentTab != UpTab.ARCHIVE) return
+        archiveAdapter.submit(archiveVisibleItems.toList())
+        if (archiveVisibleItems.isEmpty() && !binding.swipeRefresh.isRefreshing) {
+            resetAndLoadArchive()
+        }
+    }
+
+    private fun onArchiveSearchUi(ui: UpArchiveSearchController.Ui) {
+        if (ui.query != archiveSearchQuery.trim()) return
+        archiveSearchUi = ui
+        if (currentTab != UpTab.ARCHIVE) return
+        applyArchiveSearchItems(ui)
+        archiveGridController?.clearPendingFocusAfterLoadMore()
+        binding.btnArchiveSearchClear.isVisible = true
+        binding.tvArchiveSearchStatus.isVisible = true
+        binding.tvArchiveSearchStatus.text = archiveSearchStatusText(ui)
+    }
+
+    /**
+     * 搜索结果落地：同一次搜索里结果只增不减，用 append 增量插入，
+     * 避免每翻一页 submit 一次把 TV 焦点和滚动位置顶回顶部。
+     */
+    private fun applyArchiveSearchItems(ui: UpArchiveSearchController.Ui) {
+        val sameQuery = ui.query == archiveSearchSubmittedQuery
+        val submitted = archiveSearchSubmittedCount
+        when {
+            !sameQuery -> {
+                archiveSearchSubmittedQuery = ui.query
+                archiveAdapter.submit(ui.items)
+                archiveSearchSubmittedCount = ui.items.size
+            }
+            ui.items.size > submitted -> {
+                archiveAdapter.append(ui.items.subList(submitted, ui.items.size))
+                archiveSearchSubmittedCount = ui.items.size
+            }
+            ui.items.size < submitted -> {
+                archiveAdapter.submit(ui.items)
+                archiveSearchSubmittedCount = ui.items.size
+            }
+        }
+    }
+
+    private fun archiveSearchStatusText(ui: UpArchiveSearchController.Ui): String {
+        val found = ui.items.size
+        if (ui.serverMode) {
+            return when {
+                ui.scanning && found == 0 -> "正在搜索该 UP 的全部投稿…"
+                found == 0 -> "没有找到匹配的视频"
+                ui.canLoadMore -> "已找到 $found 个（继续下滑查看更多）"
+                else -> "共 $found 个匹配视频"
+            }
+        }
+        return when {
+            ui.scanning -> "正在搜索…已找到 $found 个（已扫描 ${ui.scannedCount} 个视频）"
+            ui.cappedByScanLimit -> "已找到 $found 个（只扫描了前 ${ui.scannedCount} 个视频）"
+            found == 0 -> "没有找到匹配的视频"
+            else -> "已找到 $found 个（${ui.scannedCount} 个视频已全部扫描）"
+        }
+    }
+
     private fun scheduleInitialTab0Focus() {
         // Mirror VideoDetailActivity: post a single initial focus request after the first layout,
         // so focus lands on the primary entry control (Tab0) instead of the header button.
@@ -423,18 +631,30 @@ class UpDetailActivity : BaseActivity() {
                 binding.recycler.adapter = archiveAdapter
                 binding.recycler.layoutManager = archiveLayoutManager
                 archiveLayoutManager.spanCount = spanCountForWidth()
+                binding.llArchiveSearch.isVisible = true
+                // 从「合集」切回来时把搜索结果重新挂上，避免列表变成浏览态
+                archiveSearchUi?.let { ui ->
+                    if (archiveSearchQuery.isNotBlank()) {
+                        archiveSearchSubmittedQuery = ""
+                        archiveSearchSubmittedCount = 0
+                        applyArchiveSearchItems(ui)
+                    }
+                }
 
                 binding.recycler.addOnScrollListener(
                     object : RecyclerView.OnScrollListener() {
                         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                             if (dy > 0) collapseHeaderForContent()
                             if (dy <= 0) return
-                            if (archiveIsLoadingMore || archiveEndReached) return
+                            val searching = archiveSearchQuery.isNotBlank()
+                            if (!searching && (archiveIsLoadingMore || archiveEndReached)) return
                             val lm = recyclerView.layoutManager as? GridLayoutManager ?: return
                             val lastVisible = lm.findLastVisibleItemPosition()
                             val total = archiveAdapter.itemCount
                             if (total <= 0) return
-                            if (total - lastVisible - 1 <= 8) loadMoreArchive()
+                            if (total - lastVisible - 1 <= 8) {
+                                if (searching) archiveSearchController?.loadMore() else loadMoreArchive()
+                            }
                         }
                     },
                 )
@@ -443,6 +663,7 @@ class UpDetailActivity : BaseActivity() {
             }
 
             UpTab.COLLECTION_SERIES -> {
+                binding.llArchiveSearch.isVisible = false
                 binding.recycler.adapter = sectionAdapter
                 binding.recycler.layoutManager = sectionsLayoutManager
                 sectionAdapter.replaceAll(seasonsSeriesSections)
@@ -472,6 +693,7 @@ class UpDetailActivity : BaseActivity() {
     private fun ensureTabLoadedIfNeeded() {
         when (currentTab) {
             UpTab.ARCHIVE -> {
+                if (archiveSearchQuery.isNotBlank()) return
                 if (!binding.swipeRefresh.isRefreshing && archiveAdapter.itemCount == 0) {
                     resetAndLoadArchive()
                 }
@@ -488,6 +710,13 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun refreshCurrentTab(initial: Boolean = false) {
+        // 搜索态下拉刷新：重跑这次搜索，不去动浏览列表
+        if (currentTab == UpTab.ARCHIVE && archiveSearchQuery.isNotBlank()) {
+            binding.swipeRefresh.isRefreshing = false
+            val preloaded = archiveBrowseItems.toList()
+            archiveSearchController?.restart(preloaded, scanStartPage = preloaded.size / 50 + 1)
+            return
+        }
         if (!initial) {
             forceFocusFirstContentAfterRefresh = true
             binding.swipeRefresh.isRefreshing = true
@@ -547,6 +776,10 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun requestFocusFirstContentFromTab(): Boolean {
+        if (currentTab == UpTab.ARCHIVE && binding.llArchiveSearch.isVisible) {
+            binding.etArchiveSearch.requestFocus()
+            return true
+        }
         when (currentTab) {
             UpTab.ARCHIVE -> {
                 if (archiveAdapter.itemCount > 0) {
@@ -655,6 +888,9 @@ class UpDetailActivity : BaseActivity() {
         }
         archiveRequestToken++
         loadedArchiveStableKeys.clear()
+        archiveBrowseItems.clear()
+        archiveBrowseKeys.clear()
+        archiveVisibleItems.clear()
         archiveNextPage = 1
         archiveEndReached = false
         archiveIsLoadingMore = false
@@ -665,6 +901,10 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun loadMoreArchive(isRefresh: Boolean = false) {
+        if (archiveSearchQuery.isNotBlank()) {
+            archiveSearchController?.loadMore()
+            return
+        }
         if (archiveIsLoadingMore || archiveEndReached) return
         val token = archiveRequestToken
         val targetPage = archiveNextPage.coerceAtLeast(1)
@@ -684,6 +924,12 @@ class UpDetailActivity : BaseActivity() {
 
                 val visibleItems = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedArchiveStableKeys)
                 visibleItems.forEach { loadedArchiveStableKeys.add(it.stableKey()) }
+                // 原始投稿（含被屏蔽项）也留一份：搜索时拼音过滤需要完整标题集合
+                if (isRefresh) archiveBrowseItems.clear()
+                val newRaw = page.items.filter { archiveBrowseKeys.add(it.stableKey()) }
+                archiveBrowseItems.addAll(newRaw)
+                if (isRefresh) archiveVisibleItems.clear()
+                archiveVisibleItems.addAll(visibleItems)
                 if (isRefresh) archiveAdapter.submit(visibleItems) else archiveAdapter.append(visibleItems)
 
                 binding.recycler.post {
@@ -1117,10 +1363,11 @@ class UpDetailActivity : BaseActivity() {
                             switchToNextTabFromContentEdge()
                         }
 
-                        override fun canLoadMore(): Boolean = !archiveEndReached
+                        override fun canLoadMore(): Boolean =
+                            if (archiveSearchQuery.isNotBlank()) archiveSearchUi?.canLoadMore == true else !archiveEndReached
 
                         override fun loadMore() {
-                            loadMoreArchive()
+                            if (archiveSearchQuery.isNotBlank()) archiveSearchController?.loadMore() else loadMoreArchive()
                         }
                     },
                 config =
@@ -1160,9 +1407,15 @@ class UpDetailActivity : BaseActivity() {
     private fun archivePlaybackHandle() =
         buildPagedVideoCardPlaybackHandle(
             source = "UpDetail:$mid:archive",
-            cardsProvider = archiveAdapter::snapshot,
+            cardsProvider = {
+                if (archiveSearchQuery.isNotBlank()) {
+                    archiveSearchController?.items() ?: emptyList()
+                } else {
+                    archiveAdapter.snapshot()
+                }
+            },
             nextCursorProvider = { archiveNextPage },
-            hasMoreProvider = { !archiveEndReached },
+            hasMoreProvider = { archiveSearchQuery.isBlank() && !archiveEndReached },
         ) { pageNum ->
             val targetPage = pageNum.coerceAtLeast(1)
             val page = BiliApi.spaceArcSearchPage(mid = mid, pn = targetPage, ps = 30)

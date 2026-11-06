@@ -1707,7 +1707,9 @@ class PlayerActivity : BaseActivity() {
                     if (osdMode == OsdMode.Hidden) {
                         binding.btnPlayPause.performClick()
                         if (osdMode != OsdMode.Hidden) {
-                            restoreLastOsdFocusOr { focusFirstControl() }
+                            // 这一下是「暂停」唤出的控制栏：焦点直接落在播放/暂停键，
+                            // 不要还原上一次的 OSD 焦点，否则用户得再摸一遍遥控器找按钮
+                            focusFirstControl()
                         }
                         return true
                     }
@@ -1718,7 +1720,7 @@ class PlayerActivity : BaseActivity() {
                 if (osdMode == OsdMode.Hidden && !isSidePanelVisible()) {
                     binding.btnPlayPause.performClick()
                     if (osdMode != OsdMode.Hidden) {
-                        restoreLastOsdFocusOr { focusFirstControl() }
+                        focusFirstControl()
                     }
                     return true
                 }
@@ -2068,8 +2070,15 @@ class PlayerActivity : BaseActivity() {
             engine.pause()
         }
         if (showControls) setControlsVisible(true)
-        // 遥控器暂停后，把焦点自动移到「播放/暂停」按钮，方便直接再按一次继续。
-        if (!willPlay && showControls && osdMode == OsdMode.Full && !isSidePanelVisible()) {
+        // 遥控器暂停后把焦点自动移到「播放/暂停」按钮，方便直接再按一次继续。
+        // 注意：这里不能要求 showControls 为 true —— 控制栏本来就显示着（osdMode == Full）时，
+        // 用遥控器暂停键暂停（showControls 取决于「暂停时显示控制栏」设置，默认关闭），
+        // 焦点会留在原来的按钮上，用户会觉得「暂停了但没跳到暂停键」。
+        if (!willPlay &&
+            osdMode == OsdMode.Full &&
+            !isSidePanelVisible() &&
+            !binding.root.isInTouchMode
+        ) {
             focusFirstControl()
         }
         if (showHint) {

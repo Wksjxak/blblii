@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 测试包用独立名称，桌面上能和正式版区分 -->
+    <string name="app_name">blbl 测试版</string>
+</resources>

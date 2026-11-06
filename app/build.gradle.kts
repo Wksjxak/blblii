@@ -40,6 +40,8 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
+            // 测试包与正式包共存：独立包名，安装时互不覆盖
+            applicationIdSuffix = ".debug"
         }
         release {
             isMinifyEnabled = true
