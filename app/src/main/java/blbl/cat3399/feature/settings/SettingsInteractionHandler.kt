@@ -1392,6 +1392,10 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.PlayerAutoSkipDelaySeconds -> {
+                showPlayerAutoSkipDelaySecondsDialog(state.currentSectionIndex, entry.id)
+            }
+
             SettingId.PlayerAutoSkipSegmentCategories -> {
                 showPlayerAutoSkipSegmentCategoriesDialog(state.currentSectionIndex, entry.id)
             }
@@ -2610,8 +2614,26 @@ class SettingsInteractionHandler(
         )
     }
 
-    private fun showPlayerAutoSkipSegmentCategoriesDialog(sectionIndex: Int, focusId: SettingId) {
+    private fun showPlayerAutoSkipDelaySecondsDialog(sectionIndex: Int, focusId: SettingId) {
         val prefs = BiliClient.prefs
+        val options =
+            (AppPrefs.PLAYER_AUTO_SKIP_DELAY_SECONDS_MIN..AppPrefs.PLAYER_AUTO_SKIP_DELAY_SECONDS_MAX).toList()
+        fun labelOf(seconds: Int): String = if (seconds == 0) "不等待（立即跳过）" else "$seconds 秒"
+        val labels = options.map(::labelOf)
+        showChoiceDialog(
+            title = "跳过倒计时",
+            items = labels,
+            current = labelOf(prefs.playerAutoSkipDelaySeconds),
+        ) { selected ->
+            val index = labels.indexOf(selected)
+            if (index >= 0) {
+                prefs.playerAutoSkipDelaySeconds = options[index]
+            }
+            renderer.showSection(sectionIndex, focusId = focusId)
+        }
+    }
+
+    private fun showPlayerAutoSkipSegmentCategoriesDialog(sectionIndex: Int, focusId: SettingId) {        val prefs = BiliClient.prefs
         val options = SettingsText.playerAutoSkipSegmentCategoryOptions
         val keys = options.map { it.first }
         val selected = prefs.playerAutoSkipSegmentCategories.toSet()

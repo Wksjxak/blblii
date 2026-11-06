@@ -106,22 +106,11 @@ data class DanmakuSessionSettings(
         )
 }
 
-/** 特殊弹幕字号放大系数（接近 B 站「前方高能」等大字号弹幕观感）。 */
+/** 特殊弹幕字号放大系数（历史常量，特殊弹幕现已整体不渲染）。 */
 internal const val SPECIAL_DANMAKU_SCALE = 1.5f
 
-/** 文本是否属于高能/预警类特殊弹幕。 */
-internal fun isHighlightText(t: String): Boolean {
-    val s = t.trim()
-    if (s.isEmpty()) return false
-    return s.contains("高能") ||
-        s.contains("ohh", ignoreCase = true) ||
-        s.contains("前方") ||
-        s.contains("注意") ||
-        s.contains("预警") ||
-        s.contains("小心") ||
-        s.contains("警报")
-}
-
-/** 高亮特殊弹幕：高级弹幕（mode 7-9）或文本含高能/预警类关键词。 */
-internal fun isHighlightDanmaku(d: Danmaku): Boolean =
-    d.mode in 7..9 || isHighlightText(d.text)
+/**
+ * 定制版：高级弹幕（mode 7~9）在数据源与引擎两处均被过滤，不再渲染；
+ * 普通弹幕即使文本包含「前方高能」等关键词，也不再放大字号或加底色，统一按普通弹幕显示。
+ */
+internal fun isHighlightDanmaku(d: Danmaku): Boolean = d.mode in 7..9

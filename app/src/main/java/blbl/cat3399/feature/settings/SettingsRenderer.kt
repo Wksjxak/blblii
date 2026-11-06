@@ -394,6 +394,12 @@ class SettingsRenderer(
                         null,
                     ),
                     SettingEntry(
+                        SettingId.PlayerAutoSkipDelaySeconds,
+                        "跳过倒计时",
+                        "${prefs.playerAutoSkipDelaySeconds} 秒",
+                        null,
+                    ),
+                    SettingEntry(
                         SettingId.PlayerAutoSkipSegmentCategories,
                         "自动跳过片段类型",
                         SettingsText.playerAutoSkipSegmentCategoriesText(prefs.playerAutoSkipSegmentCategories),

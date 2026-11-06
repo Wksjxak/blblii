@@ -3772,7 +3772,7 @@ class PlayerActivity : BaseActivity() {
         internal const val SEEK_OSD_HIDE_DELAY_MS = 1_500L
         internal const val VIDEOSHOT_PREVIEW_HIDE_AFTER_SEEK_MS = 500L
         internal const val AUTO_SKIP_START_WINDOW_MS = 1_000L
-        internal const val AUTO_SKIP_DELAY_MS = 2_000L
+        // 跳过倒计时改为用户设置（AppPrefs.playerAutoSkipDelaySeconds，0~5 秒），不再使用固定常量。
         internal const val AUTO_RESUME_BACK_RESTART_WINDOW_MS = 3_000L
         internal const val KEY_STEP_SEEK_COMMIT_DELAY_MS = 450L
         internal const val KEY_SCRUB_END_DELAY_MS = 800L

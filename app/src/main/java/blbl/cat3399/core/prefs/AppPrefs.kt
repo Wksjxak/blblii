@@ -621,6 +621,18 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_PLAYER_AUTO_SKIP_SEGMENTS_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_AUTO_SKIP_SEGMENTS_ENABLED, value).apply()
 
+    /** 空降助手跳过前的倒计时（秒，0~5，默认 3）。0 表示检测到片段立即跳过。 */
+    var playerAutoSkipDelaySeconds: Int
+        get() =
+            prefs.getInt(KEY_PLAYER_AUTO_SKIP_DELAY_SECONDS, PLAYER_AUTO_SKIP_DELAY_SECONDS_DEFAULT)
+                .coerceIn(PLAYER_AUTO_SKIP_DELAY_SECONDS_MIN, PLAYER_AUTO_SKIP_DELAY_SECONDS_MAX)
+        set(value) =
+            prefs.edit()
+                .putInt(
+                    KEY_PLAYER_AUTO_SKIP_DELAY_SECONDS,
+                    value.coerceIn(PLAYER_AUTO_SKIP_DELAY_SECONDS_MIN, PLAYER_AUTO_SKIP_DELAY_SECONDS_MAX),
+                ).apply()
+
     var playerAutoSkipSegmentCategories: List<String>
         get() {
             if (!prefs.contains(KEY_PLAYER_AUTO_SKIP_SEGMENT_CATEGORIES)) {
@@ -1146,6 +1158,11 @@ class AppPrefs(context: Context) {
         const val PLAYER_SEEK_SENSITIVITY_MAX = 2.0f
         const val PLAYER_SEEK_SENSITIVITY_STEP = 0.1f
 
+        // 空降助手跳过倒计时（秒）
+        const val PLAYER_AUTO_SKIP_DELAY_SECONDS_DEFAULT = 3
+        const val PLAYER_AUTO_SKIP_DELAY_SECONDS_MIN = 0
+        const val PLAYER_AUTO_SKIP_DELAY_SECONDS_MAX = 5
+
         const val THEME_PRESET_DEFAULT = "default"
         const val THEME_PRESET_TV_PINK = "tv_pink"
         const val THEME_PRESET_TV_PINK_ILLUSTRATION = "tv_pink_illustration"
@@ -1248,6 +1265,7 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_HOLD_SCRUB_FIXED_STEP_SECONDS = "player_hold_scrub_fixed_step_seconds"
         private const val KEY_PLAYER_AUTO_RESUME_ENABLED = "player_auto_resume_enabled"
         private const val KEY_PLAYER_AUTO_SKIP_SEGMENTS_ENABLED = "player_auto_skip_segments_enabled"
+        private const val KEY_PLAYER_AUTO_SKIP_DELAY_SECONDS = "player_auto_skip_delay_seconds"
         private const val KEY_PLAYER_AUTO_SKIP_SEGMENT_CATEGORIES = "player_auto_skip_segment_categories"
         private const val KEY_PLAYER_AUTO_SKIP_SERVER_BASE_URL = "player_auto_skip_server_base_url"
         private const val KEY_SPONSOR_BLOCK_PRIVATE_USER_ID = "sponsor_block_private_user_id"

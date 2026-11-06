@@ -1188,7 +1188,7 @@ internal class DanmakuEngine(
     private fun isColorDanmaku(d: Danmaku): Boolean =
         d.color != 0 && d.color != 0xFFFFFF && d.color != 0xFFFFFFFF.toInt()
 
-    private fun isSpecialDanmaku(d: Danmaku): Boolean = d.mode in 7..9 || isHighlightText(d.text)
+    private fun isSpecialDanmaku(d: Danmaku): Boolean = d.mode in 7..9
 
     /**
      * 重复弹幕整合：滚动/逆向滚动弹幕按文本合并，显示「文本×数量」，数量随时间随同文本到达数递增。

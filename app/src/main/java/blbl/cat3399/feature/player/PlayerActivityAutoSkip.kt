@@ -262,7 +262,12 @@ internal fun PlayerActivity.maybeTickAutoSkipSegments(posMs: Long) {
     val windowEndMs = posMs + PlayerActivity.AUTO_SKIP_START_WINDOW_MS
     val candidate = findAutoSkipCandidate(autoSkipSegments, autoSkipHandledSegmentIds, posMs, windowEndMs) ?: return
 
-    autoSkipPending = PendingAutoSkip(token = autoSkipToken, segment = candidate, dueAtElapsedMs = now + PlayerActivity.AUTO_SKIP_DELAY_MS)
+    autoSkipPending =
+        PendingAutoSkip(
+            token = autoSkipToken,
+            segment = candidate,
+            dueAtElapsedMs = now + BiliClient.prefs.playerAutoSkipDelaySeconds * 1000L,
+        )
     trace?.log("skipseg:pending", "id=${candidate.id} cat=${candidate.category ?: ""} src=${candidate.source}")
     showAutoSkipHint(candidate)
 }

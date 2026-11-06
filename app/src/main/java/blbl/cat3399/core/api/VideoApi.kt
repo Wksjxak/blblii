@@ -638,6 +638,8 @@ internal object VideoApi {
         val reply = DmSegMobileReply.parseFrom(bytes)
         val list =
             reply.elemsList.mapNotNull { e ->
+                // 定制版：高级/代码/BAS 弹幕（mode 7~9）一律不渲染，直接在数据源丢弃。
+                if (e.mode in 7..9) return@mapNotNull null
                 val text = e.content ?: return@mapNotNull null
                 Danmaku(
                     timeMs = e.progress,
