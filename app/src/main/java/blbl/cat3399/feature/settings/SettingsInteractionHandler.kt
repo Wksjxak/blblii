@@ -1371,6 +1371,38 @@ class SettingsInteractionHandler(
                 }
             }
 
+            SettingId.PlayerProgressDisplayMode -> {
+                val modes =
+                    listOf(
+                        AppPrefs.PROGRESS_DISPLAY_MODE_TIME to "时间（00:12 / 15:10）",
+                        AppPrefs.PROGRESS_DISPLAY_MODE_PERCENT to "百分比（12.3%）",
+                    )
+                showChoiceDialog(
+                    title = "进度条显示样式",
+                    items = modes.map { it.second },
+                    current = modes.firstOrNull { it.first == prefs.progressDisplayMode }?.second ?: modes.first().second,
+                ) { selected ->
+                    val mode = modes.firstOrNull { it.second == selected }?.first ?: return@showChoiceDialog
+                    prefs.progressDisplayMode = mode
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
+            SettingId.PlayerProgressPercentDecimals -> {
+                val counts =
+                    (AppPrefs.PROGRESS_PERCENT_DECIMALS_MIN..AppPrefs.PROGRESS_PERCENT_DECIMALS_MAX)
+                        .map { it to "$it 位" }
+                showChoiceDialog(
+                    title = "百分比小数位",
+                    items = counts.map { it.second },
+                    current = "${prefs.progressPercentDecimals} 位",
+                ) { selected ->
+                    val v = selected.removeSuffix(" 位").toIntOrNull() ?: return@showChoiceDialog
+                    prefs.progressPercentDecimals = v
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
             SettingId.PlayerHoldSeekMode -> {
                 val options =
                     listOf(

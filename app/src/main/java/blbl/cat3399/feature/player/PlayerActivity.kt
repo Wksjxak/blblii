@@ -2166,7 +2166,7 @@ class PlayerActivity : BaseActivity() {
                         if (seekBar?.isPressed != true) {
                             keySeekPreviewPosMs = previewPos
                         }
-                        binding.tvTime.text = "${formatHms(previewPos)} / ${formatHms(duration)}"
+                        binding.tvTime.text = formatProgressText(previewPos, duration)
 
                         val hasVideoShot =
                             currentVideoShot != null &&
@@ -2211,7 +2211,7 @@ class PlayerActivity : BaseActivity() {
                     keySeekPreviewPosMs = null
                     keyScrubPendingSeekToMs = null
                     engine.seekTo(seekTo)
-                    binding.tvTime.text = "${formatHms(seekTo)} / ${formatHms(duration)}"
+                    binding.tvTime.text = formatProgressText(seekTo, duration)
                     requestDanmakuSegmentsForPosition(seekTo, immediate = true)
                     scrubbing = false
                     keyScrubEndJob?.cancel()

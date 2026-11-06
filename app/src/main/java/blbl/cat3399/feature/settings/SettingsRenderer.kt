@@ -384,6 +384,18 @@ class SettingsRenderer(
                         },
                         null,
                     ),
+                    SettingEntry(
+                        SettingId.PlayerProgressDisplayMode,
+                        "进度条显示样式",
+                        if (prefs.progressDisplayMode == AppPrefs.PROGRESS_DISPLAY_MODE_PERCENT) "百分比" else "时间",
+                        null,
+                    ),
+                    SettingEntry(
+                        SettingId.PlayerProgressPercentDecimals,
+                        "百分比小数位",
+                        "${prefs.progressPercentDecimals} 位",
+                        "仅百分比样式下生效",
+                    ),
                     SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进模式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),
                     SettingEntry(
                         SettingId.PlayerHoldScrubTraverseSeconds,

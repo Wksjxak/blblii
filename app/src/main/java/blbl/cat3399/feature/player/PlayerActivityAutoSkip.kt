@@ -57,8 +57,8 @@ internal fun PlayerActivity.updateProgressUi() {
 
     val uiScrubbing = scrubbing || holdScrubPreviewPosMs != null || keySeekPreviewPosMs != null
     if (!uiScrubbing) {
-        binding.tvTime.text = "${formatHms(pos)} / ${formatHms(duration)}"
-        binding.tvSeekOsdTime.text = "${formatHms(pos)} / ${formatHms(duration)}"
+        binding.tvTime.text = formatProgressText(pos, duration)
+        binding.tvSeekOsdTime.text = formatProgressText(pos, duration)
     }
 
     val enabled = duration > 0

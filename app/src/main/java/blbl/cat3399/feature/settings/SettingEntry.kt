@@ -56,6 +56,8 @@ enum class SettingId(
     PlayerShortSeekStepSeconds("player_short_seek_step_seconds"),
     PlayerHoldSeekSpeed("player_hold_seek_speed"),
     PlayerHoldSeekSpeedMode("player_hold_seek_speed_mode"),
+    PlayerProgressDisplayMode("player_progress_display_mode"),
+    PlayerProgressPercentDecimals("player_progress_percent_decimals"),
     PlayerHoldSeekMode("player_hold_seek_mode"),
     PlayerHoldScrubTraverseSeconds("player_hold_scrub_traverse_seconds"),
     PlayerHoldScrubFixedStepSeconds("player_hold_scrub_fixed_step_seconds"),

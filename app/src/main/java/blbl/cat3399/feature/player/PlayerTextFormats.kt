@@ -1,5 +1,7 @@
 package blbl.cat3399.feature.player
 
+import blbl.cat3399.core.net.BiliClient
+import blbl.cat3399.core.prefs.AppPrefs
 import blbl.cat3399.feature.settings.SettingsText
 import blbl.cat3399.feature.player.danmaku.DanmakuFontWeight
 import blbl.cat3399.feature.player.danmaku.DanmakuLaneDensity
@@ -130,6 +132,33 @@ internal fun formatHms(ms: Long): String {
         String.format(Locale.US, "%d:%02d:%02d", h, m, s)
     } else {
         String.format(Locale.US, "%02d:%02d", m, s)
+    }
+}
+
+/** 进度百分比（0~100）。总时长无效时返回 0。 */
+internal fun progressPercentOf(posMs: Long, durationMs: Long): Double {
+    if (durationMs <= 0L) return 0.0
+    val p = posMs.coerceAtLeast(0L).toDouble() / durationMs.toDouble() * 100.0
+    return p.coerceIn(0.0, 100.0)
+}
+
+/** 按「百分比小数位」设置格式化百分比文本，如 12.3%。 */
+internal fun formatProgressPercent(percent: Double): String {
+    val decimals =
+        BiliClient.prefs.progressPercentDecimals
+            .coerceIn(AppPrefs.PROGRESS_PERCENT_DECIMALS_MIN, AppPrefs.PROGRESS_PERCENT_DECIMALS_MAX)
+    return String.format(Locale.US, "%.${decimals}f%%", percent.coerceIn(0.0, 100.0))
+}
+
+/** 进度显示文本：时间样式为「当前 / 总时长」，百分比样式为「12.3%」。 */
+internal fun formatProgressText(posMs: Long, durationMs: Long): String {
+    val percentMode =
+        BiliClient.prefs.progressDisplayMode == AppPrefs.PROGRESS_DISPLAY_MODE_PERCENT
+    return if (percentMode) {
+        // 时长未知（如直播、加载中）时退回时间样式，避免一直显示 0.0%。
+        if (durationMs <= 0L) formatHms(posMs) else formatProgressPercent(progressPercentOf(posMs, durationMs))
+    } else {
+        "${formatHms(posMs)} / ${formatHms(durationMs)}"
     }
 }
 

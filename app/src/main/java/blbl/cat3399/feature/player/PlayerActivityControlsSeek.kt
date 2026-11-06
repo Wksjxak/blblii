@@ -146,7 +146,7 @@ internal fun PlayerActivity.showSeekOsd(posMs: Long, durationMs: Long, bufferedP
 
     if (osdMode == PlayerActivity.OsdMode.Full) {
         // Full OSD: update the real SeekBar + time (useful for hold-scrub preview).
-        binding.tvTime.text = "${formatHms(pos)} / ${formatHms(duration)}"
+        binding.tvTime.text = formatProgressText(pos, duration)
         val enabled = duration > 0L
         binding.seekProgress.isEnabled = enabled
         if (enabled) {
@@ -167,7 +167,7 @@ internal fun PlayerActivity.showSeekOsd(posMs: Long, durationMs: Long, bufferedP
         return
     }
 
-    binding.tvSeekOsdTime.text = "${formatHms(pos)} / ${formatHms(duration)}"
+    binding.tvSeekOsdTime.text = formatProgressText(pos, duration)
 
     val enabled = duration > 0L
     binding.progressSeekOsd.isEnabled = enabled
@@ -690,8 +690,17 @@ internal fun PlayerActivity.stopHoldSeek() {
 }
 
 internal fun PlayerActivity.showSeekStepHint(direction: Int, totalMs: Long) {
-    val sec = (kotlin.math.abs(totalMs) / 1000L).coerceAtLeast(1L)
-    val text = if (direction > 0) "快进 ${sec}s" else "后退 ${sec}s"
+    val duration = player?.duration?.takeIf { it > 0L } ?: 0L
+    val percentMode = BiliClient.prefs.progressDisplayMode == AppPrefs.PROGRESS_DISPLAY_MODE_PERCENT
+    val text =
+        if (percentMode && duration > 0L) {
+            // 百分比样式下，快进/后退提示同样使用百分比口径。
+            val pct = formatProgressPercent(kotlin.math.abs(totalMs).toDouble() / duration.toDouble() * 100.0)
+            if (direction > 0) "快进 $pct" else "后退 $pct"
+        } else {
+            val sec = (kotlin.math.abs(totalMs) / 1000L).coerceAtLeast(1L)
+            if (direction > 0) "快进 ${sec}s" else "后退 ${sec}s"
+        }
     showSeekHint(text, hold = false)
 }
 

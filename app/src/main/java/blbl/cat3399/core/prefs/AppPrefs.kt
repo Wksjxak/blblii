@@ -590,6 +590,38 @@ class AppPrefs(context: Context) {
             prefs.edit().putString(KEY_PLAYER_HOLD_SEEK_SPEED_MODE, normalized).apply()
         }
 
+    /** 进度显示样式：time=时间 / percent=百分比。 */
+    var progressDisplayMode: String
+        get() {
+            val raw = prefs.getString(KEY_PROGRESS_DISPLAY_MODE, PROGRESS_DISPLAY_MODE_DEFAULT).orEmpty()
+            return if (raw.trim() == PROGRESS_DISPLAY_MODE_PERCENT) {
+                PROGRESS_DISPLAY_MODE_PERCENT
+            } else {
+                PROGRESS_DISPLAY_MODE_TIME
+            }
+        }
+        set(value) {
+            val normalized =
+                if (value.trim() == PROGRESS_DISPLAY_MODE_PERCENT) {
+                    PROGRESS_DISPLAY_MODE_PERCENT
+                } else {
+                    PROGRESS_DISPLAY_MODE_TIME
+                }
+            prefs.edit().putString(KEY_PROGRESS_DISPLAY_MODE, normalized).apply()
+        }
+
+    /** 百分比小数位数（0~2）。 */
+    var progressPercentDecimals: Int
+        get() =
+            prefs.getInt(KEY_PROGRESS_PERCENT_DECIMALS, PROGRESS_PERCENT_DECIMALS_DEFAULT)
+                .coerceIn(PROGRESS_PERCENT_DECIMALS_MIN, PROGRESS_PERCENT_DECIMALS_MAX)
+        set(value) =
+            prefs.edit()
+                .putInt(
+                    KEY_PROGRESS_PERCENT_DECIMALS,
+                    value.coerceIn(PROGRESS_PERCENT_DECIMALS_MIN, PROGRESS_PERCENT_DECIMALS_MAX),
+                ).apply()
+
     var playerHoldSeekMode: String
         get() {
             val raw = prefs.getString(KEY_PLAYER_HOLD_SEEK_MODE, PLAYER_HOLD_SEEK_MODE_SPEED) ?: PLAYER_HOLD_SEEK_MODE_SPEED
@@ -1288,6 +1320,8 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_SHORT_SEEK_STEP_SECONDS = "player_short_seek_step_seconds"
         private const val KEY_PLAYER_HOLD_SEEK_SPEED = "player_hold_seek_speed"
         private const val KEY_PLAYER_HOLD_SEEK_SPEED_MODE = "player_hold_seek_speed_mode"
+        private const val KEY_PROGRESS_DISPLAY_MODE = "progress_display_mode"
+        private const val KEY_PROGRESS_PERCENT_DECIMALS = "progress_percent_decimals"
         private const val KEY_PLAYER_HOLD_SEEK_MODE = "player_hold_seek_mode"
         private const val KEY_PLAYER_HOLD_SCRUB_TRAVERSE_SECONDS = "player_hold_scrub_traverse_seconds"
         private const val KEY_PLAYER_HOLD_SCRUB_FIXED_STEP_SECONDS = "player_hold_scrub_fixed_step_seconds"
@@ -1457,6 +1491,13 @@ class AppPrefs(context: Context) {
         const val PLAYER_HOLD_SEEK_SPEED_MODE_DEFAULT = PLAYER_HOLD_SEEK_SPEED_MODE_SIMPLE
         const val PLAYER_HOLD_SEEK_SPEED_MIN = 1.5f
         const val PLAYER_HOLD_SEEK_SPEED_MAX = 4.0f
+
+        const val PROGRESS_DISPLAY_MODE_TIME = "time"
+        const val PROGRESS_DISPLAY_MODE_PERCENT = "percent"
+        const val PROGRESS_DISPLAY_MODE_DEFAULT = PROGRESS_DISPLAY_MODE_TIME
+        const val PROGRESS_PERCENT_DECIMALS_DEFAULT = 1
+        const val PROGRESS_PERCENT_DECIMALS_MIN = 0
+        const val PROGRESS_PERCENT_DECIMALS_MAX = 2
         val PLAYER_HOLD_SCRUB_SECONDS_OPTIONS: Set<Int> = linkedSetOf(5, 8, 10, 12, 15, 17, 20, 22, 25, 27, 30)
         const val PLAYER_HOLD_SCRUB_SECONDS_DEFAULT = 10
 
