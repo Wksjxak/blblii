@@ -1339,14 +1339,34 @@ class SettingsInteractionHandler(
             }
 
             SettingId.PlayerHoldSeekSpeed -> {
-                val options = listOf(1.5f, 2.0f, 3.0f, 4.0f)
+                val options = PlaybackSettingChoices.holdSeekSpeedsFor(prefs.playerHoldSeekSpeedMode)
                 showChoiceDialog(
                     title = "长按快进倍率",
                     items = options.map { String.format(Locale.US, "%.2fx", it) },
                     current = String.format(Locale.US, "%.2fx", prefs.playerHoldSeekSpeed),
                 ) { selected ->
                     val v = selected.removeSuffix("x").toFloatOrNull()
-                    if (v != null) prefs.playerHoldSeekSpeed = v.coerceIn(1.5f, 4.0f)
+                    if (v != null) {
+                        prefs.playerHoldSeekSpeed =
+                            v.coerceIn(AppPrefs.PLAYER_HOLD_SEEK_SPEED_MIN, AppPrefs.PLAYER_HOLD_SEEK_SPEED_MAX)
+                    }
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
+            SettingId.PlayerHoldSeekSpeedMode -> {
+                val modes =
+                    listOf(
+                        AppPrefs.PLAYER_HOLD_SEEK_SPEED_MODE_FINE to "细致（0.1 步进）",
+                        AppPrefs.PLAYER_HOLD_SEEK_SPEED_MODE_SIMPLE to "简单（0.5 步进）",
+                    )
+                showChoiceDialog(
+                    title = "长按快进倍率模式",
+                    items = modes.map { it.second },
+                    current = modes.firstOrNull { it.first == prefs.playerHoldSeekSpeedMode }?.second ?: modes.first().second,
+                ) { selected ->
+                    val mode = modes.firstOrNull { it.second == selected }?.first ?: return@showChoiceDialog
+                    prefs.playerHoldSeekSpeedMode = mode
                     renderer.refreshSection(entry.id)
                 }
             }

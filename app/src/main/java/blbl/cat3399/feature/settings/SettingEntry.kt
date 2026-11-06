@@ -55,6 +55,7 @@ enum class SettingId(
     PlayerSeekSensitivity("player_seek_sensitivity"),
     PlayerShortSeekStepSeconds("player_short_seek_step_seconds"),
     PlayerHoldSeekSpeed("player_hold_seek_speed"),
+    PlayerHoldSeekSpeedMode("player_hold_seek_speed_mode"),
     PlayerHoldSeekMode("player_hold_seek_mode"),
     PlayerHoldScrubTraverseSeconds("player_hold_scrub_traverse_seconds"),
     PlayerHoldScrubFixedStepSeconds("player_hold_scrub_fixed_step_seconds"),

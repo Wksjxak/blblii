@@ -329,7 +329,7 @@ internal object PlayerUiMode {
             )
         }
 
-        (binding.controlsRow.layoutParams as? MarginLayoutParams)?.let { lp ->
+        (binding.controlsScroll.layoutParams as? MarginLayoutParams)?.let { lp ->
             val height = scaledPx(R.dimen.player_controls_row_height).coerceAtLeast(1)
             val ms = scaledPx(R.dimen.player_controls_row_margin_start)
             val me = scaledPx(R.dimen.player_controls_row_margin_end)
@@ -337,7 +337,7 @@ internal object PlayerUiMode {
                 lp.height = height
                 lp.marginStart = ms
                 lp.marginEnd = me
-                binding.controlsRow.layoutParams = lp
+                binding.controlsScroll.layoutParams = lp
             }
         }
         binding.tvTime.setTextSize(
@@ -488,7 +488,7 @@ internal object PlayerUiMode {
             binding.seekProgress.setTrackHeightPx(trackHeight)
         }
 
-        (binding.controlsRow.layoutParams as? MarginLayoutParams)?.let { lp ->
+        (binding.controlsScroll.layoutParams as? MarginLayoutParams)?.let { lp ->
             val height =
                 scaledPx(blbl.cat3399.R.dimen.player_controls_row_height).coerceAtLeast(1)
             val ms = scaledPx(blbl.cat3399.R.dimen.player_controls_row_margin_start)
@@ -497,7 +497,7 @@ internal object PlayerUiMode {
                 lp.height = height
                 lp.marginStart = ms
                 lp.marginEnd = me
-                binding.controlsRow.layoutParams = lp
+                binding.controlsScroll.layoutParams = lp
             }
         }
         binding.tvTime.setTextSize(

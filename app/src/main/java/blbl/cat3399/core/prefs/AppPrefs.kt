@@ -559,9 +559,36 @@ class AppPrefs(context: Context) {
         get() {
             val v = prefs.getFloat(KEY_PLAYER_HOLD_SEEK_SPEED, PLAYER_HOLD_SEEK_SPEED_DEFAULT)
             if (!v.isFinite()) return PLAYER_HOLD_SEEK_SPEED_DEFAULT
-            return v.coerceIn(1.5f, 4.0f)
+            return v.coerceIn(PLAYER_HOLD_SEEK_SPEED_MIN, PLAYER_HOLD_SEEK_SPEED_MAX)
         }
-        set(value) = prefs.edit().putFloat(KEY_PLAYER_HOLD_SEEK_SPEED, value.coerceIn(1.5f, 4.0f)).apply()
+        set(value) =
+            prefs.edit()
+                .putFloat(
+                    KEY_PLAYER_HOLD_SEEK_SPEED,
+                    value.takeIf { it.isFinite() }
+                        ?.coerceIn(PLAYER_HOLD_SEEK_SPEED_MIN, PLAYER_HOLD_SEEK_SPEED_MAX)
+                        ?: PLAYER_HOLD_SEEK_SPEED_DEFAULT,
+                ).apply()
+
+    /** 长按快进倍率模式：细致(0.1 步进) / 简单(0.5 步进)。 */
+    var playerHoldSeekSpeedMode: String
+        get() {
+            val raw = prefs.getString(KEY_PLAYER_HOLD_SEEK_SPEED_MODE, PLAYER_HOLD_SEEK_SPEED_MODE_DEFAULT).orEmpty()
+            return if (raw.trim() == PLAYER_HOLD_SEEK_SPEED_MODE_FINE) {
+                PLAYER_HOLD_SEEK_SPEED_MODE_FINE
+            } else {
+                PLAYER_HOLD_SEEK_SPEED_MODE_DEFAULT
+            }
+        }
+        set(value) {
+            val normalized =
+                if (value.trim() == PLAYER_HOLD_SEEK_SPEED_MODE_FINE) {
+                    PLAYER_HOLD_SEEK_SPEED_MODE_FINE
+                } else {
+                    PLAYER_HOLD_SEEK_SPEED_MODE_DEFAULT
+                }
+            prefs.edit().putString(KEY_PLAYER_HOLD_SEEK_SPEED_MODE, normalized).apply()
+        }
 
     var playerHoldSeekMode: String
         get() {
@@ -1260,6 +1287,7 @@ class AppPrefs(context: Context) {
         private const val KEY_TIMER_CUSTOM_LAST_SECONDS = "timer_custom_last_seconds"
         private const val KEY_PLAYER_SHORT_SEEK_STEP_SECONDS = "player_short_seek_step_seconds"
         private const val KEY_PLAYER_HOLD_SEEK_SPEED = "player_hold_seek_speed"
+        private const val KEY_PLAYER_HOLD_SEEK_SPEED_MODE = "player_hold_seek_speed_mode"
         private const val KEY_PLAYER_HOLD_SEEK_MODE = "player_hold_seek_mode"
         private const val KEY_PLAYER_HOLD_SCRUB_TRAVERSE_SECONDS = "player_hold_scrub_traverse_seconds"
         private const val KEY_PLAYER_HOLD_SCRUB_FIXED_STEP_SECONDS = "player_hold_scrub_fixed_step_seconds"
@@ -1424,6 +1452,11 @@ class AppPrefs(context: Context) {
         const val PLAYER_HOLD_SEEK_MODE_SCRUB = "scrub"
         const val PLAYER_HOLD_SEEK_MODE_SCRUB_FIXED_TIME = "scrub_fixed_time"
         const val PLAYER_HOLD_SEEK_SPEED_DEFAULT = 3.0f
+        const val PLAYER_HOLD_SEEK_SPEED_MODE_FINE = "fine"
+        const val PLAYER_HOLD_SEEK_SPEED_MODE_SIMPLE = "simple"
+        const val PLAYER_HOLD_SEEK_SPEED_MODE_DEFAULT = PLAYER_HOLD_SEEK_SPEED_MODE_SIMPLE
+        const val PLAYER_HOLD_SEEK_SPEED_MIN = 1.5f
+        const val PLAYER_HOLD_SEEK_SPEED_MAX = 4.0f
         val PLAYER_HOLD_SCRUB_SECONDS_OPTIONS: Set<Int> = linkedSetOf(5, 8, 10, 12, 15, 17, 20, 22, 25, 27, 30)
         const val PLAYER_HOLD_SCRUB_SECONDS_DEFAULT = 10
 

@@ -74,6 +74,7 @@ internal fun PlayerActivity.setControlsVisible(visible: Boolean) {
     transientSeekOsdVisible = false
     osdMode = if (show) PlayerActivity.OsdMode.Full else PlayerActivity.OsdMode.Hidden
 
+    binding.controlsScroll.visibility = if (show) View.VISIBLE else View.GONE
     binding.controlsRow.visibility = if (show) View.VISIBLE else View.GONE
     binding.tvTime.visibility = if (show) View.VISIBLE else View.GONE
     updateTopBarUi()

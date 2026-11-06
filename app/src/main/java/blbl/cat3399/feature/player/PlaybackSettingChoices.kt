@@ -21,6 +21,20 @@ internal object PlaybackSettingChoices {
     /** 按「播放速度模式」返回对应档位列表。 */
     fun playbackSpeedsFor(mode: String): List<Float> =
         if (mode == AppPrefs.PLAYBACK_SPEED_MODE_SIMPLE) simplePlaybackSpeeds else finePlaybackSpeeds
+
+    /** 长按快进倍率：细致档位，0.1 步进（1.5x ~ 4.0x）。 */
+    val fineHoldSeekSpeeds: List<Float> =
+        ((AppPrefs.PLAYER_HOLD_SEEK_SPEED_MIN * 10).toInt()..(AppPrefs.PLAYER_HOLD_SEEK_SPEED_MAX * 10).toInt())
+            .map { it / 10f }
+
+    /** 长按快进倍率：简单档位，0.5 步进（1.5x / 2.0x / 2.5x / 3.0x / 3.5x / 4.0x）。 */
+    val simpleHoldSeekSpeeds: List<Float> =
+        ((AppPrefs.PLAYER_HOLD_SEEK_SPEED_MIN * 10).toInt()..(AppPrefs.PLAYER_HOLD_SEEK_SPEED_MAX * 10).toInt() step 5)
+            .map { it / 10f }
+
+    /** 按「长按快进倍率模式」返回对应档位列表。 */
+    fun holdSeekSpeedsFor(mode: String): List<Float> =
+        if (mode == AppPrefs.PLAYER_HOLD_SEEK_SPEED_MODE_FINE) fineHoldSeekSpeeds else simpleHoldSeekSpeeds
     /** 进度手势灵敏度：0.5x ~ 2.0x，步长 0.1。 */
     val seekSensitivities: List<Float> = (5..20).map { it / 10f }
     val subtitleTextSizes: List<Int> = (10..60 step 2).toList()

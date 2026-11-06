@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.BuildConfig
 import blbl.cat3399.core.net.BiliClient
+import blbl.cat3399.core.prefs.AppPrefs
 import blbl.cat3399.core.ui.FocusTreeUtils
 import blbl.cat3399.core.ui.requestFocusAdapterPositionReliable
 import blbl.cat3399.databinding.ActivitySettingsBinding
@@ -371,6 +372,16 @@ class SettingsRenderer(
                         SettingId.PlayerHoldSeekSpeed,
                         "长按快进倍率",
                         String.format(java.util.Locale.US, "%.2fx", prefs.playerHoldSeekSpeed),
+                        null,
+                    ),
+                    SettingEntry(
+                        SettingId.PlayerHoldSeekSpeedMode,
+                        "长按快进倍率模式",
+                        if (prefs.playerHoldSeekSpeedMode == AppPrefs.PLAYER_HOLD_SEEK_SPEED_MODE_FINE) {
+                            "细致（0.1 步进）"
+                        } else {
+                            "简单（0.5 步进）"
+                        },
                         null,
                     ),
                     SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进模式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),

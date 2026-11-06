@@ -2070,6 +2070,10 @@ class PlayerActivity : BaseActivity() {
             engine.pause()
         }
         if (showControls) setControlsVisible(true)
+        // 遥控器暂停后，把焦点自动移到「播放/暂停」按钮，方便直接再按一次继续。
+        if (!willPlay && showControls && osdMode == OsdMode.Full && !isSidePanelVisible()) {
+            focusFirstControl()
+        }
         if (showHint) {
             showSeekHint(if (willPlay) "播放" else "暂停", hold = false)
         }
