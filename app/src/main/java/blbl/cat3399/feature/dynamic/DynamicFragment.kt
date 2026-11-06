@@ -51,6 +51,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -266,15 +268,68 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         maybeConsumeRecentUpdate(following)
     }
 
+    private var followRenderJob: Job? = null
+    private var followSearchJob: Job? = null
+    private var followingFilterPending: Boolean = false
+    // 补全翻页期间只做轻量的原文过滤，拼音匹配留到翻完再统一算一次
+    private var followCascadeActive: Boolean = false
+
     private fun renderFollowings() {
-        followItems = buildFollowingUiList()
+        val query = followingSearchQuery.trim()
+        val followings = orderedFollowings()
+        val showRecentDot = currentRecentUpdatePriorityEnabled
+        val recentMids = recentUpdatePriorityMids
+        val consumedMids = HashSet(consumedRecentUpdateMids)
+        val matcher = if (query.isEmpty()) null else PinyinSearch.matcher(query)
+
+        followRenderJob?.cancel()
+        followRenderJob = null
+        if (matcher == null) {
+            followingFilterPending = false
+            applyFollowingUi(
+                buildFollowingUiList(followings, null, showRecentDot, recentMids, consumedMids),
+                query,
+            )
+            return
+        }
+
+        // 先出一版「原文包含」的结果：英文名（如 MeetFood）不用等拼音就能立刻看到，
+        // TV 上遥控器逐字母输入时这一步尤其重要。
+        followingFilterPending = true
+        val literalMatcher: (String) -> Boolean = { name -> name.contains(query, ignoreCase = true) }
+        applyFollowingUi(
+            buildFollowingUiList(followings, literalMatcher, showRecentDot, recentMids, consumedMids),
+            query,
+        )
+
+        // 补全翻页期间跳过拼音这步：反正后面还有新页进来，拼音算完也会被下一次刷新覆盖
+        if (followCascadeActive) {
+            followingFilterPending = false
+            return
+        }
+
+        // 再在后台补拼音/首字母匹配（几百个名字算拼音在 TV 上很慢），算完合并覆盖
+        followRenderJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                val items =
+                    withContext(Dispatchers.Default) {
+                        buildFollowingUiList(followings, matcher, showRecentDot, recentMids, consumedMids)
+                    }
+                followingFilterPending = false
+                applyFollowingUi(items, query)
+            }
+    }
+
+    private fun applyFollowingUi(items: List<FollowingAdapter.FollowingUi>, query: String) {
+        val b = _binding ?: return
+        followItems = items
         // 选中项随搜索过滤只按全部关注列表校验，避免搜索时被误重置为「所有」。
         if (selectedMid != FollowingAdapter.MID_ALL && baseFollowings.none { it.mid == selectedMid }) {
             selectedMid = FollowingAdapter.MID_ALL
         }
-        followAdapter.submit(followItems, selected = selectedMid)
-        _binding?.tvFollowingEmpty?.isVisible =
-            followingSearchQuery.trim().isNotEmpty() && followItems.isEmpty()
+        followAdapter.submit(items, selected = selectedMid)
+        // 拼音匹配还在后台跑时先不显示「没有匹配」，避免结果一闪一闪
+        b.tvFollowingEmpty.isVisible = query.isNotEmpty() && items.isEmpty() && !followingFilterPending
     }
 
     /** 后台预计算拼音缓存，避免首次搜索卡顿。 */
@@ -285,26 +340,27 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         }
     }
 
-    private fun buildFollowingUiList(): List<FollowingAdapter.FollowingUi> {
-        val query = followingSearchQuery.trim()
-        val items = ArrayList<FollowingAdapter.FollowingUi>(baseFollowings.size + 1)
+    private fun buildFollowingUiList(
+        followings: List<Following>,
+        matcher: ((String) -> Boolean)?,
+        showRecentDot: Boolean,
+        recentMids: Set<Long>,
+        consumedMids: Set<Long>,
+    ): List<FollowingAdapter.FollowingUi> {
+        val items = ArrayList<FollowingAdapter.FollowingUi>(followings.size + 1)
         // 搜索时隐藏「所有」，只展示匹配到的 UP 主。
-        if (query.isEmpty()) {
+        if (matcher == null) {
             items += FollowingAdapter.FollowingUi(FollowingAdapter.MID_ALL, "所有", null, isAll = true)
         }
-        for (following in orderedFollowings()) {
-            if (query.isNotEmpty() && !PinyinSearch.matches(following.name, query)) continue
+        for (following in followings) {
+            if (matcher != null && !matcher(following.name)) continue
             val mid = following.mid
-            val hasRecentUpdate = recentUpdatePriorityMids.contains(mid)
             items +=
                 FollowingAdapter.FollowingUi(
                     mid = mid,
                     name = following.name,
                     avatarUrl = following.avatarUrl,
-                    showRecentUpdateDot =
-                        currentRecentUpdatePriorityEnabled &&
-                            hasRecentUpdate &&
-                            !consumedRecentUpdateMids.contains(mid),
+                    showRecentUpdateDot = showRecentDot && recentMids.contains(mid) && !consumedMids.contains(mid),
                 )
         }
         return items
@@ -488,9 +544,18 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         if (query.isEmpty() || followEndReached || userMid <= 0) return
         searchLoadJob =
             viewLifecycleOwner.lifecycleScope.launch {
-                while (isActive && !followEndReached) {
-                    if (baseFollowings.any { it.name.contains(query, ignoreCase = true) }) break
-                    if (!loadMoreFollowingsPage()) break
+                // 不因为「已经匹配到一条」就停下：目标可能在后几页，停了就永远搜不到。
+                // 一直翻到关注列表底部（换词会取消本轮），每页之间让出主线程。
+                followCascadeActive = true
+                try {
+                    while (isActive && !followEndReached) {
+                        if (!loadMoreFollowingsPage()) break
+                        delay(60)
+                    }
+                } finally {
+                    followCascadeActive = false
+                    // 翻完补一次完整的（含拼音）渲染
+                    if (_binding != null) renderFollowings()
                 }
             }
     }
@@ -675,6 +740,21 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         return true
     }
 
+    // 输入防抖：停手 180ms 才真正过滤，避免每个字都全量重建列表 + 触发翻页
+    private fun scheduleFollowingSearch(query: String) {
+        followSearchJob?.cancel()
+        followSearchJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                // 过滤只等 180ms，输入框先有反应
+                delay(180)
+                renderFollowings()
+                _binding?.recyclerFollowing?.scrollToPosition(0)
+                // 翻页补全再等等（TV 上遥控器是一格一格敲的，每个字母都触发全量翻页会很重）
+                delay(700)
+                ensureFollowingsLoadedForSearch(query)
+            }
+    }
+
     private fun setupFollowingSearch(binding: FragmentDynamicBinding) {
         binding.etFollowingSearch.addTextChangedListener(
             object : TextWatcher {
@@ -684,9 +764,7 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                     val q = s?.toString().orEmpty()
                     if (q == followingSearchQuery) return
                     followingSearchQuery = q
-                    renderFollowings()
-                    _binding?.recyclerFollowing?.scrollToPosition(0)
-                    ensureFollowingsLoadedForSearch(q.trim())
+                    scheduleFollowingSearch(q.trim())
                 }
             },
         )

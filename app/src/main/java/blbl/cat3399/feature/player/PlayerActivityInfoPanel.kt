@@ -102,7 +102,7 @@ internal fun PlayerActivity.refreshPlayerInfoPanelContent() {
             currentPlayerViewCount?.let { add("${Format.count(it)}播放") }
             currentPlayerDanmakuCount?.let { add("${Format.count(it)}弹幕") }
             currentPlayerPubDateSec?.let { pubDate ->
-                val text = Format.pubDateText(pubDate).ifBlank { Format.timeText(pubDate) }
+                val text = Format.pubDateTimeText(pubDate).ifBlank { Format.timeText(pubDate) }
                 if (text.isNotBlank()) add(text)
             }
         }

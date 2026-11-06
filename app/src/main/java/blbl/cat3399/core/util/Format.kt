@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object Format {
     private val sdfHmChina =
@@ -14,6 +15,14 @@ object Format {
     private val sdfYmdChina =
         object : ThreadLocal<SimpleDateFormat>() {
             override fun initialValue(): SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
+        }
+
+    private val sdfYMdHmChina =
+        object : ThreadLocal<SimpleDateFormat>() {
+            override fun initialValue(): SimpleDateFormat =
+                SimpleDateFormat("yyyy.M.d HH:mm", Locale.CHINA).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+                }
         }
 
     private val sdfYMdChina =
@@ -32,6 +41,16 @@ object Format {
     private fun sdfYMd(): SimpleDateFormat =
         sdfYMdChina.get()
             ?: SimpleDateFormat("yyyy.M.d", Locale.CHINA).also { sdfYMdChina.set(it) }
+
+    private fun sdfYMdHm(): SimpleDateFormat =
+        sdfYMdHmChina.get()
+            ?: SimpleDateFormat("yyyy.M.d HH:mm", Locale.CHINA).also { sdfYMdHmChina.set(it) }
+
+    // 播放器里用：显示精确的「发布日期 + 具体时间」，列表仍用相对时间
+    fun pubDateTimeText(epochSec: Long): String {
+        if (epochSec <= 0) return ""
+        return sdfYMdHm().format(Date(epochSec * 1000))
+    }
 
     fun duration(sec: Int): String {
         val s = if (sec < 0) 0 else sec

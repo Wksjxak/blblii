@@ -59,6 +59,8 @@ class MyHistoryFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHandler 
     private val paging = PagedGridStateMachine<BiliApi.HistoryCursor?>(initialKey = null)
     private var initialLoadTriggered: Boolean = false
 
+    private var pendingAnchorStableKey: String? = null
+    private var lastAutoRefreshAt: Long = 0L
     private var pendingFocusFirstItemFromTabSwitch: Boolean = false
     private var pendingFocusFirstItemAfterRefresh: Boolean = false
     private var dpadGridController: DpadGridController? = null
@@ -193,6 +195,8 @@ class MyHistoryFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHandler 
     }
 
     override fun requestFocusFirstItemFromTabSwitch(): Boolean {
+        // 切到「历史」这个 tab 时也自动刷新一次（不保留滚动位置，直接看最新）
+        silentRefreshForProgressDataSource(anchorToCurrent = false)
         pendingFocusFirstItemFromTabSwitch = true
         if (!isResumed) return true
         return maybeConsumePendingFocusFirstItemFromTabSwitch()
@@ -255,19 +259,33 @@ class MyHistoryFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHandler 
         loadNextPage(isRefresh = true)
     }
 
-    private fun silentRefreshForProgressDataSource() {
+    // 回到历史页（onResume）时自动按服务器顺序刷新：新看的视频会重新排到最前，
+    // 刷新前记住当前第一条可见项，刷完滚回原位，避免被顶到顶部。
+    private fun silentRefreshForProgressDataSource(anchorToCurrent: Boolean = true) {
         val b = _binding ?: return
         if (!initialLoadTriggered) return
         if (adapter.itemCount <= 0) return
         if (b.swipeRefresh.isRefreshing) return
         if (paging.snapshot().isLoading) return
+        // onResume 和 tab 切换会前后脚各触发一次，3 秒内只刷一次
+        val now = SystemClock.uptimeMillis()
+        if (now - lastAutoRefreshAt < 3000L) return
+        lastAutoRefreshAt = now
+        val firstVisible = (b.recycler.layoutManager as? GridLayoutManager)?.findFirstVisibleItemPosition() ?: -1
+        // 停在顶部附近才做全量刷新（新看的视频会排到最前）；已经翻到较后面时就只原地更新进度，避免列表被顶走
+        val nearTop = firstVisible in 0..5
+        val presentation =
+            if (nearTop) RefreshPresentation.ResetToServerOrder else RefreshPresentation.PreserveCurrentOrder
+        pendingAnchorStableKey =
+            if (anchorToCurrent && nearTop && firstVisible >= 0) {
+                adapter.stableKeysSnapshot().getOrNull(firstVisible)
+            } else {
+                null
+            }
         paging.reset()
         loadedKeys.clear()
         dpadGridController?.clearPendingFocusAfterLoadMore()
-        loadNextPage(
-            isRefresh = true,
-            refreshPresentation = RefreshPresentation.PreserveCurrentOrder,
-        )
+        loadNextPage(isRefresh = true, refreshPresentation = presentation)
     }
 
     private data class FetchedPage(
@@ -328,6 +346,7 @@ class MyHistoryFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHandler 
                             adapter.submit(emptyList())
                         }
                     }
+                    pendingAnchorStableKey = null
                     if (applied.isRefresh && pendingFocusFirstItemAfterRefresh) {
                         pendingFocusFirstItemAfterRefresh = false
                         _binding?.recycler?.postIfAlive(isAlive = { _binding != null && isResumed }) {
@@ -366,6 +385,13 @@ class MyHistoryFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHandler 
                         )
                         viewportFillMonitor?.scheduleCheck()
                         return@postIfAlive
+                    }
+                    if (applied.isRefresh) {
+                        pendingAnchorStableKey?.let { key ->
+                            pendingAnchorStableKey = null
+                            val pos = adapter.positionOfStableKey(key)
+                            if (pos > 0) binding.recycler.scrollToPosition(pos)
+                        }
                     }
                     maybeConsumePendingFocusFirstItemFromTabSwitch()
                     dpadGridController?.consumePendingFocusAfterLoadMore()

@@ -76,6 +76,8 @@ internal class HistoryAdapter(
         return true
     }
 
+    fun positionOfStableKey(stableKey: String): Int = items.indexOfFirst { it.stableKey() == stableKey }
+
     fun removeByStableKey(stableKey: String): Int {
         val index = items.indexOfFirst { it.stableKey() == stableKey }
         if (index < 0) return -1

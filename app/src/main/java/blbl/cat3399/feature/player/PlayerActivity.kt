@@ -2282,7 +2282,7 @@ class PlayerActivity : BaseActivity() {
         }
 
         val pubDateSec = detail.pubDateSec
-        val pubDateText = pubDateSec?.let { BlblFormat.pubDateText(it) }.orEmpty()
+        val pubDateText = pubDateSec?.let { BlblFormat.pubDateTimeText(it) }.orEmpty()
         binding.tvPubdate.text = pubDateText
         binding.tvPubdate.visibility = if (pubDateText.isNotBlank()) View.VISIBLE else View.GONE
     }
