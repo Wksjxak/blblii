@@ -2919,9 +2919,8 @@ class SettingsInteractionHandler(
                 try {
                     val update = ApkUpdater.fetchLatestUpdate()
                     val latest = update.versionName
-                    val current = BuildConfig.VERSION_NAME
                     state.testUpdateCheckState =
-                        if (ApkUpdater.isRemoteNewer(latest, current)) {
+                        if (ApkUpdater.isRemoteNewer(update)) {
                             TestUpdateCheckState.UpdateAvailable(update)
                         } else {
                             TestUpdateCheckState.Latest(latest)

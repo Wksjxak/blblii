@@ -98,17 +98,11 @@ jobs:
           RELEASE_TAG: ${{ startsWith(inputs.version_name, 'v') && inputs.version_name || format('v{0}', inputs.version_name) }}
           CHANGELOG: ${{ inputs.changelog }}
         run: |
+          # 带上 Build 标记（= versionCode）：同版本号重新出包时，客户端靠它判断是不是更新的一包
+          printf '%s\n\nBuild: %s\n' "${CHANGELOG:-}" "${GITHUB_RUN_NUMBER}" > changelog.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [ -n "${CHANGELOG:-}" ]; then
-              printf '%s' "$CHANGELOG" > changelog.md
-              gh release edit "$RELEASE_TAG" --notes-file changelog.md
-            fi
+            gh release edit "$RELEASE_TAG" --notes-file changelog.md
           else
-            if [ -n "${CHANGELOG:-}" ]; then
-              printf '%s' "$CHANGELOG" > changelog.md
-              gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
-            else
-              gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes --target "$GITHUB_SHA"
-            fi
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
           fi
           gh release upload "$RELEASE_TAG" "$DOWNLOAD_APK" --clobber

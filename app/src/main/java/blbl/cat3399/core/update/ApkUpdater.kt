@@ -119,6 +119,8 @@ object ApkUpdater {
         val apkUrl: String? = null,
         /** 发布说明里标注的国内 CDN 直链（形如 CDN: https://...），有就优先用。 */
         val cdnUrl: String? = null,
+        /** 发布说明里的 Build: N 标记（= 正式包的 versionCode），用于同版本号重新出包时的判断。 */
+        val buildNumber: Long = 0L,
         val versions: List<RemoteUpdate> = emptyList(),
     ) {
         val displayChangelog: String
@@ -231,11 +233,18 @@ object ApkUpdater {
         throw lastError ?: error("检查更新失败")
     }
 
+    /** 代理/边缘节点会把 GitHub API、raw 文件缓存住，加时间戳强制拿最新的。 */
+    private fun cacheBusted(url: String): String {
+        val sep = if (url.contains('?')) '&' else '?'
+        return "$url${sep}_ts=${System.currentTimeMillis()}"
+    }
+
     private fun fetchText(url: String): String {
         val req =
             Request.Builder()
-                .url(url)
-                .header("Cache-Control", "no-cache")
+                .url(cacheBusted(url))
+                .header("Cache-Control", "no-cache, no-store")
+                .header("Pragma", "no-cache")
                 .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
                 .get()
                 .build()
@@ -275,10 +284,11 @@ object ApkUpdater {
     private fun fetchLatestReleaseOnce(url: String): RemoteUpdate {
         val req =
             Request.Builder()
-                .url(url)
+                .url(cacheBusted(url))
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
-                .header("Cache-Control", "no-cache")
+                .header("Cache-Control", "no-cache, no-store")
+                .header("Pragma", "no-cache")
                 .get()
                 .build()
         val call = okHttp.newCall(req)
@@ -314,6 +324,13 @@ object ApkUpdater {
                 if (apkUrl != null) break
             }
         }
+        val buildNumber =
+            Regex("""(?im)^\s*Build\s*[:：]\s*([0-9]+)""")
+                .find(changelog)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?: 0L
         val cdnUrl =
             Regex("""(?im)^\s*CDN\s*[:：]\s*(https://[^\s)]+)""")
                 .find(changelog)
@@ -326,6 +343,7 @@ object ApkUpdater {
             changelog = changelog,
             apkUrl = apkUrl ?: apkUrlFor(versionName),
             cdnUrl = cdnUrl,
+            buildNumber = buildNumber,
         )
     }
 
@@ -424,6 +442,17 @@ object ApkUpdater {
         val versionName = match.groupValues[2].trim()
         if (parseVersion(versionName) == null) return null
         return VersionHeading(level = level, versionName = versionName)
+    }
+
+    fun isRemoteNewer(
+        update: RemoteUpdate,
+        currentVersionName: String = BuildConfig.VERSION_NAME,
+        currentVersionCode: Long = BuildConfig.VERSION_CODE.toLong(),
+    ): Boolean {
+        if (isRemoteNewer(update.versionName, currentVersionName)) return true
+        // 同版本号重新出包（例如把修复并进当前版本）时，靠 Build 标记判断是不是更新的一包
+        val remoteCode = update.buildNumber
+        return remoteCode > 0L && remoteCode > currentVersionCode
     }
 
     fun isRemoteNewer(remoteVersionName: String, currentVersionName: String = BuildConfig.VERSION_NAME): Boolean {
