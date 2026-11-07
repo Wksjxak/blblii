@@ -128,6 +128,15 @@ class SettingsRenderer(
         )
     }
 
+    private fun updateCheckValue(): String =
+        when (val st = state.testUpdateCheckState) {
+            TestUpdateCheckState.Idle -> "点击检查"
+            TestUpdateCheckState.Checking -> "检查中…"
+            is TestUpdateCheckState.Latest -> "已是最新 ${st.latestVersion}"
+            is TestUpdateCheckState.UpdateAvailable -> "发现新版本 ${st.update.versionName}"
+            is TestUpdateCheckState.Error -> "检查失败"
+        }
+
     fun ensureInitialFocus() {
         if (activity.currentFocus != null) return
         if (restorePendingFocus()) return
@@ -572,6 +581,13 @@ class SettingsRenderer(
             "关于应用" ->
                 listOf(
                     SettingEntry(SettingId.AppVersion, "版本", BuildConfig.VERSION_NAME, null),
+                    SettingEntry(
+                        SettingId.AutoUpdateCheckEnabled,
+                        "自动检查更新",
+                        if (prefs.autoUpdateCheckEnabled) "开" else "关",
+                        "启动时检查 GitHub 上的新版本，默认每 12 小时最多查一次",
+                    ),
+                    SettingEntry(SettingId.CheckUpdate, "检查更新", updateCheckValue(), "从 GitHub Releases 获取最新正式包"),
                     SettingEntry(SettingId.ProjectUrl, "项目地址", SettingsConstants.PROJECT_URL, null),
                     SettingEntry(SettingId.LogTag, "日志标签", "BLBL", "用于 Logcat 过滤"),
                     SettingEntry(SettingId.ExportLogs, "导出日志", "保存文件", null),

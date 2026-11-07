@@ -13,6 +13,7 @@ import blbl.cat3399.core.net.await
 import blbl.cat3399.core.net.ipv4OnlyDns
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -26,10 +27,20 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 object ApkUpdater {
-    // 定制版：已移除原版自动更新检查。以下地址改为不可解析的占位，防止任何路径回联原版服务器。
-    private const val DEBUG_APK_URL = "https://example.invalid/blbl/blbl-latest-debug.apk"
-    private const val RELEASE_APK_URL = "https://example.invalid/blbl/blbl-latest-release.apk"
-    private const val CHANGELOG_URL = "https://example.invalid/blbl/CHANGELOG.md"
+    // 定制版：更新源指向本仓库的 GitHub Releases（公开仓库，匿名可查）。
+    private const val RELEASES_API_URL = "https://api.github.com/repos/Wksjxak/blblii/releases/latest"
+    private const val RELEASES_LIST_URL = "https://api.github.com/repos/Wksjxak/blblii/releases?per_page=20"
+    /** 测试通道标记：只有 tag 形如 test-0.1.38.1 的预发布包，测试版才会认。 */
+    private const val TEST_TAG_PREFIX = "test-"
+    private const val RELEASE_DOWNLOAD_BASE = "https://github.com/Wksjxak/blblii/releases/download"
+    private const val DEBUG_APK_URL = "https://github.com/Wksjxak/blblii/releases/latest/download/blbl-android-latest-debug.apk"
+    private const val RELEASE_APK_URL = "https://github.com/Wksjxak/blblii/releases/latest/download/blbl-android-latest-release.apk"
+    private const val CHANGELOG_URL = "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
+    /** 直连失败时套用的国内 GitHub 前缀代理（用于 API 与 APK 下载）。 */
+    private const val GH_PROXY_PREFIX = "https://gh-proxy.com/"
+    /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
+    private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
+    private const val CHANGELOG_PROXY_URL = GH_PROXY_PREFIX + "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
     val TEST_APK_URL: String
         get() = if (BuildConfig.DEBUG) DEBUG_APK_URL else RELEASE_APK_URL
     val TEST_CHANGELOG_URL: String
@@ -85,6 +96,8 @@ object ApkUpdater {
     data class RemoteUpdate(
         val versionName: String,
         val changelog: String,
+        /** 该版本 APK 的下载直链（GitHub Releases 资产）；为空时按版本号推导。 */
+        val apkUrl: String? = null,
         val versions: List<RemoteUpdate> = emptyList(),
     ) {
         val displayChangelog: String
@@ -101,7 +114,146 @@ object ApkUpdater {
         return left.coerceAtLeast(0)
     }
 
-    suspend fun fetchLatestUpdate(
+    suspend fun fetchLatestUpdate(): RemoteUpdate {
+        return withContext(Dispatchers.IO) {
+            // 测试版（debug 包）只走测试通道，永远不下正式包，避免“测试版被升级成正式版”。
+            if (BuildConfig.DEBUG) return@withContext fetchTestChannelUpdate()
+
+            // 1) GitHub API 直连
+            runCatching { retryFetch { fetchLatestReleaseOnce(RELEASES_API_URL) } }
+                .getOrNull()
+                ?.let { return@withContext it }
+
+            // 2) GitHub API 走国内前缀代理
+            runCatching { retryFetch { fetchLatestReleaseOnce(GH_PROXY_PREFIX + RELEASES_API_URL) } }
+                .getOrNull()
+                ?.let { return@withContext it }
+
+            // 3) 只能拿到 CHANGELOG 时：版本号照旧可用，下载地址按版本号推导
+            //    （国内直连 api.github.com 常被拦，这一步保证「检查得到新版本」）
+            var changelogError: Throwable? = null
+            for (url in listOf(CHANGELOG_PROXY_URL, CHANGELOG_MIRROR_URL, TEST_CHANGELOG_URL)) {
+                val text = runCatching { fetchText(url) }.getOrElse { changelogError = it; null }
+                    ?: continue
+                runCatching { parseChangelog(text) .copy(apkUrl = null) }.getOrNull()?.let { update ->
+                    return@withContext update.copy(apkUrl = apkUrlFor(update.versionName))
+                }
+            }
+            throw changelogError ?: error("检查更新失败，请检查网络")
+        }
+    }
+
+    private suspend fun <T> retryFetch(block: () -> T): T {
+        var lastError: Throwable? = null
+        val maxAttempts = 3
+        for (attempt in 1..maxAttempts) {
+            currentCoroutineContext().ensureActive()
+            try {
+                return block()
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                lastError = t
+                val shouldRetry =
+                    attempt < maxAttempts &&
+                        (t is IOException || t.message?.startsWith("HTTP ") == true)
+                if (!shouldRetry) throw t
+                delay(400L * attempt)
+            }
+        }
+        throw lastError ?: error("检查更新失败")
+    }
+
+    private fun fetchText(url: String): String {
+        val req =
+            Request.Builder()
+                .url(url)
+                .header("Cache-Control", "no-cache")
+                .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
+                .get()
+                .build()
+        val res = okHttp.newCall(req).execute()
+        res.use { r ->
+            check(r.isSuccessful) { "HTTP ${r.code} ${r.message}" }
+            return (r.body ?: error("empty body")).string()
+        }
+    }
+
+    /**
+     * 测试通道：读 releases 列表，取 tag 以 test- 开头、带 apk 资产的第一个预发布包。
+     * 找不到就返回“当前版本”，界面上显示已是最新，绝不回落到正式渠道。
+     */
+    private suspend fun fetchTestChannelUpdate(): RemoteUpdate {
+        var lastError: Throwable? = null
+        for (base in listOf("", GH_PROXY_PREFIX)) {
+            val text: String? =
+                runCatching { retryFetch { fetchText(base + RELEASES_LIST_URL) } }
+                    .getOrElse { lastError = it; null }
+            if (text == null) continue
+            val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: continue
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val update = runCatching { parseReleaseObject(obj, TEST_TAG_PREFIX) }.getOrNull() ?: continue
+                return update
+            }
+            return RemoteUpdate(
+                versionName = BuildConfig.VERSION_NAME,
+                changelog = "测试通道暂时没有新的测试包。",
+            )
+        }
+        throw lastError ?: error("检查更新失败，请检查网络")
+    }
+
+    /** 从 GitHub Releases API 取最新正式版：版本号、更新说明、APK 直链。 */
+    private fun fetchLatestReleaseOnce(url: String): RemoteUpdate {
+        val req =
+            Request.Builder()
+                .url(url)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
+        val call = okHttp.newCall(req)
+        val res = call.execute()
+        res.use { r ->
+            check(r.isSuccessful) { "HTTP ${r.code} ${r.message}" }
+            val body = r.body ?: error("empty body")
+            return parseReleaseObject(org.json.JSONObject(body.string()), tagPrefix = null)
+        }
+    }
+
+    /**
+     * 解析单个 release JSON。tagPrefix 非空表示只认带该前缀的测试通道标签，
+     * 版本号会先去掉前缀再去掉 v 前缀。
+     */
+    private fun parseReleaseObject(json: org.json.JSONObject, tagPrefix: String?): RemoteUpdate {
+        val tag = json.optString("tag_name").trim()
+        check(tag.isNotBlank()) { "发布信息缺少版本号" }
+        if (tagPrefix != null) {
+            if (!tag.startsWith(tagPrefix, ignoreCase = true)) error("不是测试通道的包")
+        }
+        val versionName = tag.removePrefix(tagPrefix ?: "").removePrefix("v").removePrefix("V").trim()
+        check(versionName.isNotBlank()) { "发布信息缺少版本号" }
+        val changelog = json.optString("body").trim()
+        val assets = json.optJSONArray("assets")
+        var apkUrl: String? = null
+        if (assets != null) {
+            for (i in 0 until assets.length()) {
+                val asset = assets.optJSONObject(i) ?: continue
+                val name = asset.optString("name")
+                if (!name.endsWith(".apk", ignoreCase = true)) continue
+                apkUrl = asset.optString("browser_download_url").trim().takeIf { it.isNotBlank() }
+                if (apkUrl != null) break
+            }
+        }
+        return RemoteUpdate(
+            versionName = versionName,
+            changelog = changelog,
+            apkUrl = apkUrl ?: apkUrlFor(versionName),
+        )
+    }
+
+    suspend fun fetchLatestUpdateFromChangelog(
         url: String = TEST_CHANGELOG_URL,
     ): RemoteUpdate {
         return withContext(Dispatchers.IO) {
@@ -180,7 +332,7 @@ object ApkUpdater {
     fun apkUrlFor(versionName: String): String {
         val cleanVersion = versionName.trim().removePrefix("v")
         val channel = if (BuildConfig.DEBUG) "debug" else "release"
-        return "https://example.invalid/blbl/blbl-$cleanVersion-$channel.apk"
+        return "$RELEASE_DOWNLOAD_BASE/v$cleanVersion/blbl-android-$cleanVersion-$channel.apk"
     }
 
     private data class VersionHeading(
@@ -190,7 +342,7 @@ object ApkUpdater {
 
     private fun parseVersionHeading(line: String): VersionHeading? {
         val trimmed = line.trim()
-        val match = Regex("""^(#{1,6})\s+\[?v?([0-9]+(?:\.[0-9]+)*(?:[-+][A-Za-z0-9_.-]+)?)\]?(?:\s+.*)?$""").matchEntire(trimmed)
+        val match = Regex("""^(#{1,6})\s+\[?v?([0-9]+(?:\.[0-9]+)*(?:[-+][A-Za-z0-9_.-]+)?)\]?(?:[\s（(].*)?$""").matchEntire(trimmed)
             ?: return null
         val level = match.groupValues[1].length
         val versionName = match.groupValues[2].trim()
@@ -210,7 +362,21 @@ object ApkUpdater {
         onProgress: (Progress) -> Unit,
     ): File {
         onProgress(Progress.Connecting)
+        try {
+            return downloadApkOnce(context, url, onProgress)
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            // GitHub 直连被墙时改用国内前缀代理重下一次
+            if (url.startsWith(GH_PROXY_PREFIX)) throw t
+            return downloadApkOnce(context, GH_PROXY_PREFIX + url, onProgress)
+        }
+    }
 
+    private suspend fun downloadApkOnce(
+        context: Context,
+        url: String,
+        onProgress: (Progress) -> Unit,
+    ): File {
         val dir = File(context.cacheDir, "test_update").apply { mkdirs() }
         val part = File(dir, "update.apk.part")
         val target = File(dir, "update.apk")

@@ -48,6 +48,7 @@ import blbl.cat3399.feature.player.engine.IjkPlayerPlugin
 import blbl.cat3399.feature.player.engine.IjkPlayerPluginUi
 import blbl.cat3399.feature.settings.SettingsActivity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -963,13 +964,51 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
     }
 
     private fun maybeStartAutoUpdateCheck() {
-        // 定制版：移除原版自动更新检测，避免拉取/覆盖原版安装包。
-        return
+        if (autoUpdateCheckStarted) return
+        if (!BiliClient.prefs.disclaimerAccepted) return
+        if (!BiliClient.prefs.autoUpdateCheckEnabled) return
+        val now = System.currentTimeMillis()
+        val last = BiliClient.prefs.autoUpdateLastCheckAtMs
+        if (last > 0L && now - last < AUTO_UPDATE_CHECK_INTERVAL_MS) return
+        autoUpdateCheckStarted = true
+        autoUpdateCheckJob =
+            lifecycleScope.launch {
+                delay(2_500)
+                try {
+                    val update = ApkUpdater.fetchLatestUpdate()
+                    BiliClient.prefs.autoUpdateLastCheckAtMs = System.currentTimeMillis()
+                    if (!ApkUpdater.isRemoteNewer(update.versionName)) return@launch
+                    val ignored = BiliClient.prefs.autoUpdateIgnoredVersionName
+                    if (!ignored.isNullOrBlank() && ignored == update.versionName.trim()) return@launch
+                    pendingAutoUpdate = update
+                    showAutoUpdatePromptIfReady()
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    AppLog.w("Update", "auto check failed: ${t.message}", t)
+                }
+            }
     }
 
     private fun showAutoUpdatePromptIfReady() {
-        // 定制版：不再提示原版更新。
-        return
+        val update = pendingAutoUpdate ?: return
+        if (isFinishing || isDestroyed) return
+        if (autoUpdatePromptShownVersion == update.versionName) return
+        if (disclaimerPopup?.isShowing == true) return
+        if (crashPromptPopup?.isShowing == true) return
+        if (ijkKernelPromptPopup?.isShowing == true) return
+        autoUpdatePromptShownVersion = update.versionName
+        pendingAutoUpdate = null
+        ApkUpdateFlow.showUpdatePrompt(
+            activity = this,
+            update = update,
+            onSkipVersion = { autoUpdatePromptShownVersion = update.versionName },
+        ) { selectedUpdate ->
+            ApkUpdateFlow.startDownloadAndInstall(
+                activity = this,
+                latestVersionHint = selectedUpdate.versionName,
+                apkUrl = selectedUpdate.apkUrl,
+            )
+        }
     }
 
     private fun refreshSidebarUser() {
@@ -1401,6 +1440,8 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
     }
 
     companion object {
+        /** 自动检查更新的最小间隔，避免每次冷启动都打 GitHub 接口。 */
+        private const val AUTO_UPDATE_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
         private const val STATE_KEY_ROOT_NAV_ID = "MainActivity.rootNavId"
         private const val BACK_DOUBLE_PRESS_WINDOW_MS = 1_500L
         private const val SIDEBAR_COLLAPSE_ARM_TIMEOUT_MS = 1_000L

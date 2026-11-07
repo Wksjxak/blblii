@@ -42,6 +42,8 @@ android {
             isMinifyEnabled = false
             // 测试包与正式包共存：独立包名，安装时互不覆盖
             applicationIdSuffix = ".debug"
+            // 测试包也用正式证书签名：保证测试版能在测试通道里自我更新（换签名就覆盖不上了）
+            signingConfig = signingConfigs.getByName("release")
         }
         release {
             isMinifyEnabled = true

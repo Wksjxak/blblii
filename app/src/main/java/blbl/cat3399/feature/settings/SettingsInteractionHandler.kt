@@ -1697,6 +1697,15 @@ class SettingsInteractionHandler(
                 }
             }
 
+            SettingId.AutoUpdateCheckEnabled -> {
+                val p = BiliClient.prefs
+                p.autoUpdateCheckEnabled = !p.autoUpdateCheckEnabled
+                AppToast.show(activity, "自动检查更新：${if (p.autoUpdateCheckEnabled) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
+            SettingId.CheckUpdate -> ensureTestUpdateChecked(force = true, promptIfUpdate = true)
+
             SettingId.ProjectUrl -> showProjectDialog()
 
             SettingId.PlayerKernelCheck -> handlePlayerKernelCheck()
@@ -2920,7 +2929,7 @@ class SettingsInteractionHandler(
                     state.testUpdateCheckedAtMs = System.currentTimeMillis()
                     if (promptIfUpdate && state.testUpdateCheckState is TestUpdateCheckState.UpdateAvailable) {
                         ApkUpdateFlow.showUpdatePrompt(activity, update) { selectedUpdate ->
-                            startTestUpdateDownload(selectedUpdate.versionName)
+                            startTestUpdateDownload(selectedUpdate)
                         }
                     }
                 } catch (_: CancellationException) {
@@ -2929,11 +2938,19 @@ class SettingsInteractionHandler(
                     state.testUpdateCheckState = TestUpdateCheckState.Error(t.message ?: "检查失败")
                     state.testUpdateCheckedAtMs = System.currentTimeMillis()
                 }
+                if (force) {
+                    when (val st = state.testUpdateCheckState) {
+                        is TestUpdateCheckState.Latest ->
+                            AppToast.show(activity, "已是最新版（当前 ${BuildConfig.VERSION_NAME}）")
+                        is TestUpdateCheckState.Error -> AppToast.showLong(activity, "检查失败：${st.message}")
+                        else -> Unit
+                    }
+                }
                 renderer.refreshAboutSectionKeepPosition()
             }
     }
 
-    private fun startTestUpdateDownload(latestVersionHint: String? = null) {
+    private fun startTestUpdateDownload(update: ApkUpdater.RemoteUpdate? = null) {
         if (testUpdateJob?.isActive == true) {
             AppToast.show(activity, "正在下载更新…")
             return
@@ -2942,10 +2959,10 @@ class SettingsInteractionHandler(
         testUpdateJob =
             ApkUpdateFlow.startDownloadAndInstall(
                 activity = activity,
-                latestVersionHint = latestVersionHint,
-                apkUrl = latestVersionHint?.let(ApkUpdater::apkUrlFor),
+                latestVersionHint = update?.versionName,
+                apkUrl = update?.apkUrl,
             ) { latestVersion, isNewer ->
-                if (!isNewer && latestVersionHint == null) state.testUpdateCheckState = TestUpdateCheckState.Latest(latestVersion)
+                if (!isNewer && update == null) state.testUpdateCheckState = TestUpdateCheckState.Latest(latestVersion)
                 state.testUpdateCheckedAtMs = System.currentTimeMillis()
                 renderer.refreshAboutSectionKeepPosition()
             }
