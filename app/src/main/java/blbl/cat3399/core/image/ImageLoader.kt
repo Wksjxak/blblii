@@ -19,6 +19,8 @@ import java.util.WeakHashMap
 
 object ImageLoader {
     private const val TAG = "ImageLoader"
+    private const val SMALL_BUCKET_MAX = 480
+    private const val LARGE_BUCKET_MAX = 1280
     private val placeholder = ColorDrawable(0xFF2A2A2A.toInt())
     private val inFlight = WeakHashMap<ImageView, Job>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -54,7 +56,9 @@ object ImageLoader {
             inFlight.remove(view)?.cancel()
         }
 
-        val cached = cache.get(normalized)
+        val bucket = decodeBucket(view)
+        val cacheKey = "$normalized@$bucket"
+        val cached = cache.get(cacheKey)
         if (cached != null) {
             view.setImageBitmap(cached)
             return
@@ -64,9 +68,10 @@ object ImageLoader {
         val job = scope.launch {
             try {
                 val bytes = withContext(Dispatchers.IO) { BiliClient.getBytes(normalized) }
-                val bmp = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+                // 按控件实际尺寸降采样：电视上整张原图解码既慢又吃内存，滚动时最容易被 GC 卡一下
+                val bmp = withContext(Dispatchers.Default) { decodeSampled(bytes, bucket) }
                 if (bmp != null) {
-                    cache.put(normalized, bmp)
+                    cache.put(cacheKey, bmp)
                     if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
                         view.setImageBitmap(bmp)
                     }
@@ -76,6 +81,25 @@ object ImageLoader {
             }
         }
         inFlight[view] = job
+    }
+
+    /** 控件目标边长分档：小卡片按 480，大图/详情页按 1280，避免按原图尺寸解码。 */
+    private fun decodeBucket(view: ImageView): Int {
+        val width = if (view.width > 0) view.width else view.layoutParams?.width?.takeIf { it > 0 } ?: 0
+        val height = if (view.height > 0) view.height else view.layoutParams?.height?.takeIf { it > 0 } ?: 0
+        val maxSide = maxOf(width, height)
+        return if (maxSide in 1..SMALL_BUCKET_MAX) SMALL_BUCKET_MAX else LARGE_BUCKET_MAX
+    }
+
+    private fun decodeSampled(bytes: ByteArray, maxSide: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sampleSize = 1
+        val longerSide = maxOf(bounds.outWidth, bounds.outHeight)
+        while (longerSide / (sampleSize * 2) >= maxSide) sampleSize *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
     }
 
     private fun normalizeImageUrl(url: String?): String? {
@@ -98,6 +122,7 @@ object ImageLoader {
 
     private fun maxCacheBytes(): Int {
         val maxMemory = Runtime.getRuntime().maxMemory().toInt()
-        return maxMemory / 16
+        // 降采样后单张位图小了很多，缓存可以放大到 1/8，减少滚回去时的重复解码
+        return maxMemory / 8
     }
 }
