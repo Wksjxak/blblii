@@ -39,7 +39,13 @@ android {
 
     buildTypes {
         debug {
-            isMinifyEnabled = false
+            // 测试包也走混淆/裁剪：debug 包体积大、冷启动慢，电视上尤其明显
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // 测试包与正式包共存：独立包名，安装时互不覆盖
             applicationIdSuffix = ".debug"
             // 测试包也用正式证书签名：保证测试版能在测试通道里自我更新（换签名就覆盖不上了）

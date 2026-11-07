@@ -146,39 +146,10 @@ class VideoDetailActivity : BaseActivity() {
             return
         }
 
-        showLoadingUi()
-        Immersive.apply(this, BiliClient.prefs.fullscreenEnabled)
-
-        lifecycleScope.launch {
-            try {
-                val detail = fetchVideoDetail()
-                val bangumiRedirect = parseBangumiRedirectUrl(detail.redirectUrl.orEmpty())
-                if (bangumiRedirect != null) {
-                    startActivity(
-                        Intent(this@VideoDetailActivity, BangumiDetailActivity::class.java)
-                            .putExtra(BangumiDetailActivity.EXTRA_IS_DRAMA, false)
-                            .apply {
-                                bangumiRedirect.epId?.let { epId ->
-                                    putExtra(BangumiDetailActivity.EXTRA_EP_ID, epId)
-                                    putExtra(BangumiDetailActivity.EXTRA_CONTINUE_EP_ID, epId)
-                                }
-                                bangumiRedirect.seasonId?.let { seasonId ->
-                                    putExtra(BangumiDetailActivity.EXTRA_SEASON_ID, seasonId)
-                                }
-                            },
-                    )
-                    finish()
-                    return@launch
-                }
-
-                initUi()
-                load(prefetchedDetail = detail)
-            } catch (t: Throwable) {
-                if (t is CancellationException) return@launch
-                AppToast.show(this@VideoDetailActivity, t.message ?: "加载失败")
-                finish()
-            }
-        }
+        // 先把页面铺出来（标题/封面/UP 主用 Intent 里已有的数据），再去拉详情，
+        // 电视上少一段空白等待，网络慢时也能马上看到界面。
+        initUi()
+        load()
     }
 
     override fun onResume() {
@@ -197,27 +168,6 @@ class VideoDetailActivity : BaseActivity() {
         commentsPopupImageViewerController = null
         ActivityStackLimiter.unregister(group = ACTIVITY_STACK_GROUP, activity = this)
         super.onDestroy()
-    }
-
-    private fun showLoadingUi() {
-        val root =
-            FrameLayout(this).apply {
-                ThemeColor.applyBackground(
-                    view = this,
-                    attr = R.attr.blblPageBackdrop,
-                    fallbackRes = R.color.blbl_bg,
-                )
-                addView(
-                    ProgressBar(this@VideoDetailActivity),
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply {
-                        gravity = Gravity.CENTER
-                    },
-                )
-            }
-        setContentView(root)
     }
 
     private fun initUi() {
