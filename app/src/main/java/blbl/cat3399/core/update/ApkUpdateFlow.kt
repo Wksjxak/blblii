@@ -105,6 +105,7 @@ object ApkUpdateFlow {
         activity: ComponentActivity,
         latestVersionHint: String? = null,
         apkUrl: String? = null,
+        cdnUrl: String? = null,
         onResolved: ((latestVersion: String, isNewer: Boolean) -> Unit)? = null,
     ): Job? {
         if (activeJob?.isActive == true) {
@@ -150,6 +151,7 @@ object ApkUpdateFlow {
                         ApkUpdater.downloadApkToCache(
                             context = activity,
                             url = apkUrl ?: ApkUpdater.apkUrlFor(latestVersion),
+                            altUrls = listOfNotNull(cdnUrl),
                         ) { dlState ->
                             when (dlState) {
                                 ApkUpdater.Progress.Connecting -> {

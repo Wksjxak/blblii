@@ -2961,6 +2961,7 @@ class SettingsInteractionHandler(
                 activity = activity,
                 latestVersionHint = update?.versionName,
                 apkUrl = update?.apkUrl,
+                cdnUrl = update?.cdnUrl,
             ) { latestVersion, isNewer ->
                 if (!isNewer && update == null) state.testUpdateCheckState = TestUpdateCheckState.Latest(latestVersion)
                 state.testUpdateCheckedAtMs = System.currentTimeMillis()

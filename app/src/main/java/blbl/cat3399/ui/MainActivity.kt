@@ -1007,6 +1007,7 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
                 activity = this,
                 latestVersionHint = selectedUpdate.versionName,
                 apkUrl = selectedUpdate.apkUrl,
+                cdnUrl = selectedUpdate.cdnUrl,
             )
         }
     }

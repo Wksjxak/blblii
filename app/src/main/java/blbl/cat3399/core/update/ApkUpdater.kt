@@ -46,7 +46,7 @@ object ApkUpdater {
     /** 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
     private val DOWNLOAD_MIRRORS =
         listOf("", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/")
-    private const val DOWNLOAD_CONNECTIONS = 4
+    private const val DOWNLOAD_CONNECTIONS = 8
     private const val PROBE_BYTES = 256L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
     private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
@@ -92,6 +92,7 @@ object ApkUpdater {
             val downloadedBytes: Long,
             val totalBytes: Long?,
             val bytesPerSecond: Long,
+            val sourceLabel: String? = null,
         ) : Progress() {
             val percent: Int? =
                 totalBytes?.takeIf { it > 0 }?.let { total ->
@@ -106,6 +107,7 @@ object ApkUpdater {
                         append(formatBytes(downloadedBytes))
                     }
                     if (bytesPerSecond > 0) append("（${formatBytes(bytesPerSecond)}/s）")
+                    if (!sourceLabel.isNullOrBlank()) append(" · $sourceLabel")
                 }
         }
     }
@@ -115,6 +117,8 @@ object ApkUpdater {
         val changelog: String,
         /** 该版本 APK 的下载直链（GitHub Releases 资产）；为空时按版本号推导。 */
         val apkUrl: String? = null,
+        /** 发布说明里标注的国内 CDN 直链（形如 CDN: https://...），有就优先用。 */
+        val cdnUrl: String? = null,
         val versions: List<RemoteUpdate> = emptyList(),
     ) {
         val displayChangelog: String
@@ -263,10 +267,18 @@ object ApkUpdater {
                 if (apkUrl != null) break
             }
         }
+        val cdnUrl =
+            Regex("""(?im)^\s*CDN\s*[:：]\s*(https://[^\s)]+)""")
+                .find(changelog)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
         return RemoteUpdate(
             versionName = versionName,
             changelog = changelog,
             apkUrl = apkUrl ?: apkUrlFor(versionName),
+            cdnUrl = cdnUrl,
         )
     }
 
@@ -376,16 +388,20 @@ object ApkUpdater {
     suspend fun downloadApkToCache(
         context: Context,
         url: String = TEST_APK_URL,
+        altUrls: List<String> = emptyList(),
         onProgress: (Progress) -> Unit,
     ): File {
         onProgress(Progress.Connecting)
 
         val candidates =
-            if (DOWNLOAD_MIRRORS.any { it.isNotEmpty() && url.startsWith(it) }) {
-                listOf(url)
-            } else {
-                DOWNLOAD_MIRRORS.map { if (it.isEmpty()) url else it + url }
-            }
+            buildList {
+                altUrls.filter { it.isNotBlank() }.forEach { add(it) }
+                if (DOWNLOAD_MIRRORS.any { it.isNotEmpty() && url.startsWith(it) }) {
+                    add(url)
+                } else {
+                    DOWNLOAD_MIRRORS.forEach { prefix -> add(if (prefix.isEmpty()) url else prefix + url) }
+                }
+            }.distinct()
 
         // 先各线路抓一小段测速，选最快的线路，再决定走分段并发
         val probes = runCatching { probeMirrors(candidates) }.getOrDefault(emptyList())
@@ -395,7 +411,7 @@ object ApkUpdater {
 
         if (best != null && best.supportsRange && best.totalBytes > 0) {
             val parallelResult =
-                runCatching { downloadApkParallel(context, best, onProgress) }
+                runCatching { downloadApkParallel(context, best, onProgress, labelOf(best.url)) }
                     .getOrElse {
                         if (it is CancellationException) throw it
                         null
@@ -405,7 +421,7 @@ object ApkUpdater {
 
         var lastError: Throwable? = null
         for (candidate in ordered) {
-            val file = runCatching { downloadApkOnce(context, candidate, onProgress) }.getOrElse {
+            val file = runCatching { downloadApkOnce(context, candidate, onProgress, labelOf(candidate) + " 单线程") }.getOrElse {
                 if (it is CancellationException) throw it
                 lastError = it
                 null
@@ -421,6 +437,9 @@ object ApkUpdater {
         val supportsRange: Boolean,
         val bytesPerSecond: Long,
     )
+
+    private fun labelOf(url: String): String =
+        runCatching { java.net.URI(url).host ?: url }.getOrDefault(url)
 
     /** 每个线路抓 256KB：既确认这条线路通，也顺便量出它的实际速度。 */
     private suspend fun probeMirrors(urls: List<String>): List<MirrorProbe> {
@@ -474,6 +493,7 @@ object ApkUpdater {
         context: Context,
         probe: MirrorProbe,
         onProgress: (Progress) -> Unit,
+        sourceLabel: String? = null,
     ): File? {
         val total = probe.totalBytes
         if (total <= 0L) return null
@@ -503,17 +523,19 @@ object ApkUpdater {
                     downloadedBytes = done,
                     totalBytes = total,
                     bytesPerSecond = done * 1_000L / elapsed,
+                    sourceLabel = sourceLabel?.let { "$it ${DOWNLOAD_CONNECTIONS}线程" },
                 )
             )
         }
 
+        val connections = if (total >= 8L * 1024L * 1024L) DOWNLOAD_CONNECTIONS else 4
         coroutineScope {
-            (0 until DOWNLOAD_CONNECTIONS).map { index ->
+            (0 until connections).map { index ->
                 async(Dispatchers.IO) {
-                    val start = total * index / DOWNLOAD_CONNECTIONS
+                    val start = total * index / connections
                     val end =
-                        if (index == DOWNLOAD_CONNECTIONS - 1) total - 1
-                        else total * (index + 1) / DOWNLOAD_CONNECTIONS - 1
+                        if (index == connections - 1) total - 1
+                        else total * (index + 1) / connections - 1
                     if (end < start) return@async
 
                     val req =
@@ -558,6 +580,7 @@ object ApkUpdater {
         context: Context,
         url: String,
         onProgress: (Progress) -> Unit,
+        sourceLabel: String? = null,
     ): File {
         val dir = File(context.cacheDir, "test_update").apply { mkdirs() }
         val part = File(dir, "update.apk.part")
@@ -603,7 +626,14 @@ object ApkUpdater {
                             // UI progress: at most 5 updates per second.
                             if (nowMs - lastEmitAtMs >= 200) {
                                 lastEmitAtMs = nowMs
-                                onProgress(Progress.Downloading(downloadedBytes = downloaded, totalBytes = total, bytesPerSecond = bytesPerSecond))
+                                onProgress(
+                                    Progress.Downloading(
+                                        downloadedBytes = downloaded,
+                                        totalBytes = total,
+                                        bytesPerSecond = bytesPerSecond,
+                                        sourceLabel = sourceLabel,
+                                    )
+                                )
                             }
                         }
                         output.fd.sync()
