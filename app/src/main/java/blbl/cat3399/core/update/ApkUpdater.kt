@@ -13,6 +13,9 @@ import blbl.cat3399.core.net.await
 import blbl.cat3399.core.net.ipv4OnlyDns
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -22,8 +25,10 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.RandomAccessFile
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 
 object ApkUpdater {
@@ -38,6 +43,11 @@ object ApkUpdater {
     private const val CHANGELOG_URL = "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
     /** 直连失败时套用的国内 GitHub 前缀代理（用于 API 与 APK 下载）。 */
     private const val GH_PROXY_PREFIX = "https://gh-proxy.com/"
+    /** 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
+    private val DOWNLOAD_MIRRORS =
+        listOf("", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/")
+    private const val DOWNLOAD_CONNECTIONS = 4
+    private const val PROBE_BYTES = 256L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
     private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
     private const val CHANGELOG_PROXY_URL = GH_PROXY_PREFIX + "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
@@ -63,6 +73,13 @@ object ApkUpdater {
 
     private val okHttp: OkHttpClient
         get() = okHttpLazy.value
+
+    private val probeClient: OkHttpClient by lazy {
+        okHttp.newBuilder()
+            .callTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(4, TimeUnit.SECONDS)
+            .build()
+    }
 
     fun evictConnections() {
         if (okHttpLazy.isInitialized()) okHttp.connectionPool.evictAll()
@@ -362,14 +379,179 @@ object ApkUpdater {
         onProgress: (Progress) -> Unit,
     ): File {
         onProgress(Progress.Connecting)
-        try {
-            return downloadApkOnce(context, url, onProgress)
-        } catch (t: Throwable) {
-            if (t is CancellationException) throw t
-            // GitHub 直连被墙时改用国内前缀代理重下一次
-            if (url.startsWith(GH_PROXY_PREFIX)) throw t
-            return downloadApkOnce(context, GH_PROXY_PREFIX + url, onProgress)
+
+        val candidates =
+            if (DOWNLOAD_MIRRORS.any { it.isNotEmpty() && url.startsWith(it) }) {
+                listOf(url)
+            } else {
+                DOWNLOAD_MIRRORS.map { if (it.isEmpty()) url else it + url }
+            }
+
+        // 先各线路抓一小段测速，选最快的线路，再决定走分段并发
+        val probes = runCatching { probeMirrors(candidates) }.getOrDefault(emptyList())
+        val best = probes.maxByOrNull { it.bytesPerSecond }
+        val ordered =
+            if (best == null) candidates else listOf(best.url) + candidates.filter { it != best.url }
+
+        if (best != null && best.supportsRange && best.totalBytes > 0) {
+            val parallelResult =
+                runCatching { downloadApkParallel(context, best, onProgress) }
+                    .getOrElse {
+                        if (it is CancellationException) throw it
+                        null
+                    }
+            if (parallelResult != null) return parallelResult
         }
+
+        var lastError: Throwable? = null
+        for (candidate in ordered) {
+            val file = runCatching { downloadApkOnce(context, candidate, onProgress) }.getOrElse {
+                if (it is CancellationException) throw it
+                lastError = it
+                null
+            }
+            if (file != null) return file
+        }
+        throw lastError ?: error("下载失败")
+    }
+
+    private data class MirrorProbe(
+        val url: String,
+        val totalBytes: Long,
+        val supportsRange: Boolean,
+        val bytesPerSecond: Long,
+    )
+
+    /** 每个线路抓 256KB：既确认这条线路通，也顺便量出它的实际速度。 */
+    private suspend fun probeMirrors(urls: List<String>): List<MirrorProbe> {
+        val results = ArrayList<MirrorProbe>(urls.size)
+        for (u in urls) {
+            currentCoroutineContext().ensureActive()
+            val probe =
+                runCatching {
+                    val req =
+                        Request.Builder()
+                            .url(u)
+                            .header("Range", "bytes=0-$PROBE_BYTES")
+                            .get()
+                            .build()
+                    val startedAt = System.currentTimeMillis()
+                    probeClient.newCall(req).execute().use { r ->
+                        if (!r.isSuccessful) return@use null
+                        val body = r.body ?: return@use null
+                        var read = 0L
+                        val buf = ByteArray(16 * 1024)
+                        body.byteStream().use { input ->
+                            while (read < PROBE_BYTES) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                read += n
+                            }
+                        }
+                        if (read <= 0L) return@use null
+                        val elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L)
+                        MirrorProbe(
+                            url = u,
+                            totalBytes = parseTotalBytes(r.header("Content-Range"), body.contentLength()),
+                            supportsRange = r.code == 206,
+                            bytesPerSecond = read * 1_000L / elapsedMs,
+                        )
+                    }
+                }.getOrNull() ?: continue
+            results.add(probe)
+        }
+        return results
+    }
+
+    private fun parseTotalBytes(contentRange: String?, contentLength: Long): Long {
+        val fromRange = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
+        if (fromRange != null && fromRange > 0L) return fromRange
+        return contentLength.coerceAtLeast(0L)
+    }
+
+    /** 分段并发下载：4 条连接各取一段，进度按总和汇报；任何异常都交给外层回退单线程。 */
+    private suspend fun downloadApkParallel(
+        context: Context,
+        probe: MirrorProbe,
+        onProgress: (Progress) -> Unit,
+    ): File? {
+        val total = probe.totalBytes
+        if (total <= 0L) return null
+
+        val dir = File(context.cacheDir, "test_update").apply { mkdirs() }
+        val part = File(dir, "update.apk.part")
+        val target = File(dir, "update.apk")
+        runCatching { part.delete() }
+        runCatching { target.delete() }
+        part.createNewFile()
+        RandomAccessFile(part, "rw").use { it.setLength(total) }
+
+        val downloaded = AtomicLong(0L)
+        val lastEmitAt = AtomicLong(0L)
+        val startedAt = System.currentTimeMillis()
+        val emitLock = Any()
+        fun emitProgress() {
+            val now = System.currentTimeMillis()
+            synchronized(emitLock) {
+                if (now - lastEmitAt.get() < 200L) return
+                lastEmitAt.set(now)
+            }
+            val done = downloaded.get()
+            val elapsed = (now - startedAt).coerceAtLeast(1L)
+            onProgress(
+                Progress.Downloading(
+                    downloadedBytes = done,
+                    totalBytes = total,
+                    bytesPerSecond = done * 1_000L / elapsed,
+                )
+            )
+        }
+
+        coroutineScope {
+            (0 until DOWNLOAD_CONNECTIONS).map { index ->
+                async(Dispatchers.IO) {
+                    val start = total * index / DOWNLOAD_CONNECTIONS
+                    val end =
+                        if (index == DOWNLOAD_CONNECTIONS - 1) total - 1
+                        else total * (index + 1) / DOWNLOAD_CONNECTIONS - 1
+                    if (end < start) return@async
+
+                    val req =
+                        Request.Builder()
+                            .url(probe.url)
+                            .header("Range", "bytes=$start-$end")
+                            .get()
+                            .build()
+                    okHttp.newCall(req).execute().use { r ->
+                        check(r.code == 206) { "该线路不支持分段下载（HTTP ${r.code}）" }
+                        val body = r.body ?: error("empty body")
+                        RandomAccessFile(part, "rw").use { raf ->
+                            raf.seek(start)
+                            body.byteStream().use { input ->
+                                val buf = ByteArray(32 * 1024)
+                                var pos = start
+                                while (pos <= end) {
+                                    currentCoroutineContext().ensureActive()
+                                    val n = input.read(buf)
+                                    if (n <= 0) break
+                                    val writeLen = minOf(n.toLong(), end - pos + 1).toInt()
+                                    raf.write(buf, 0, writeLen)
+                                    pos += writeLen
+                                    downloaded.addAndGet(writeLen.toLong())
+                                    emitProgress()
+                                }
+                                check(pos == end + 1) { "分段未下载完整（$start-$end）" }
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+
+        runCatching { FileOutputStream(part, true).use { it.fd.sync() } }
+        check(part.length() == total) { "文件大小不符（${part.length()} / $total）" }
+        check(part.renameTo(target)) { "rename failed" }
+        return target
     }
 
     private suspend fun downloadApkOnce(
