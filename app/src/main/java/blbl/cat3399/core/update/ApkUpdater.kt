@@ -122,7 +122,42 @@ object ApkUpdater {
         val versions: List<RemoteUpdate> = emptyList(),
     ) {
         val displayChangelog: String
-            get() = changelog.ifBlank { "暂无更新日志" }
+            get() = sanitizeChangelogForDisplay(changelog)
+    }
+
+    /** 弹窗里直接显示纯文本：去掉 ### / ** 这类记号，也去掉给程序看的 CDN 行。 */
+    fun sanitizeChangelogForDisplay(raw: String): String {
+        if (raw.isBlank()) return "暂无更新日志"
+        val lines =
+            raw.lineSequence()
+                .map { it.trimEnd() }
+                .filterNot {
+                    val t = it.trim()
+                    t.startsWith("CDN:") || t.startsWith("CDN：")
+                }
+                .map { line ->
+                    var text = line
+                    text = text.replace(Regex("^#{1,6}\\s*"), "")
+                    text = text.replace(Regex("^>\\s*"), "")
+                    text = text.replace("**", "")
+                    text = text.replace(Regex("^[-*]\\s+"), "· ")
+                    text
+                }
+                .toList()
+        val collapsed =
+            buildString {
+                var blankRun = 0
+                for (line in lines) {
+                    if (line.isBlank()) {
+                        blankRun++
+                        if (blankRun > 1) continue
+                    } else {
+                        blankRun = 0
+                    }
+                    append(line).append('\n')
+                }
+            }.trim()
+        return collapsed.ifBlank { "暂无更新日志" }
     }
 
     fun markStarted(nowMs: Long = System.currentTimeMillis()) {
@@ -143,12 +178,12 @@ object ApkUpdater {
             // 1) GitHub API 直连
             runCatching { retryFetch { fetchLatestReleaseOnce(RELEASES_API_URL) } }
                 .getOrNull()
-                ?.let { return@withContext it }
+                ?.let { return@withContext withVersionHistory(it) }
 
             // 2) GitHub API 走国内前缀代理
             runCatching { retryFetch { fetchLatestReleaseOnce(GH_PROXY_PREFIX + RELEASES_API_URL) } }
                 .getOrNull()
-                ?.let { return@withContext it }
+                ?.let { return@withContext withVersionHistory(it) }
 
             // 3) 只能拿到 CHANGELOG 时：版本号照旧可用，下载地址按版本号推导
             //    （国内直连 api.github.com 常被拦，这一步保证「检查得到新版本」）
@@ -162,6 +197,18 @@ object ApkUpdater {
             }
             throw changelogError ?: error("检查更新失败，请检查网络")
         }
+    }
+
+    /** 用仓库 CHANGELOG 补全历史版本，供弹窗「上一版 / 下一版」翻看；失败就算了，不影响升级。 */
+    private fun withVersionHistory(update: RemoteUpdate): RemoteUpdate {
+        if (update.versions.size > 1) return update
+        val text =
+            runCatching { fetchText(CHANGELOG_PROXY_URL) }.getOrNull()
+                ?: runCatching { fetchText(CHANGELOG_MIRROR_URL) }.getOrNull()
+                ?: return update
+        val parsed = runCatching { parseChangelogVersions(text) }.getOrNull() ?: return update
+        if (parsed.isEmpty()) return update
+        return update.copy(versions = parsed)
     }
 
     private suspend fun <T> retryFetch(block: () -> T): T {

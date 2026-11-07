@@ -72,7 +72,8 @@ object ApkUpdateFlow {
                         }
                     },
                     PopupAction(role = PopupActionRole.POSITIVE, text = "立即更新") {
-                        onUpdate(selectedUpdate)
+                        // 翻看历史版本只是为了读说明，真装还是装最新的那个，避免装成旧版
+                        onUpdate(versions.first())
                     },
                 ),
             preferredActionRole = PopupActionRole.POSITIVE,
