@@ -1,7 +1,10 @@
 package blbl.cat3399.ui
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.os.Process
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
@@ -76,6 +79,7 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
     private var autoUpdatePromptPopup: PopupHandle? = null
     private var ijkKernelPromptShown: Boolean = false
     private var autoUpdateCheckStarted: Boolean = false
+    private var updateRestartPending: Boolean = false
     private var autoUpdatePromptShownVersion: String? = null
     private var pendingAutoUpdate: ApkUpdater.RemoteUpdate? = null
     private var autoUpdateCheckJob: Job? = null
@@ -219,6 +223,7 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
                 loadUserInfo()
             }
         }
+        restartIfReplacedByUpdate()
         showLastCrashPromptIfNeeded()
         showIjkKernelUpdatePromptIfNeeded()
         showAutoUpdatePromptIfReady()
@@ -961,6 +966,38 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
                     showAutoUpdatePromptIfReady()
                 },
             )
+    }
+
+    /**
+     * 应用内更新装完之后，系统不一定把旧进程杀掉，用户会看到"更新了但没生效，要退出重进"。
+     * 这里在每次回到前台时比对已安装版本和当前运行版本，不一致就用闹钟把自己拉起来再退出。
+     */
+    private fun restartIfReplacedByUpdate() {
+        if (isFinishing || isDestroyed) return
+        val installedVersion =
+            runCatching {
+                packageManager.getPackageInfo(packageName, 0).versionName
+            }.getOrNull() ?: return
+        if (installedVersion == BuildConfig.VERSION_NAME) return
+        if (updateRestartPending) return
+        updateRestartPending = true
+        AppLog.i("Update", "package replaced: running=${BuildConfig.VERSION_NAME} installed=$installedVersion, restart app")
+        val restartIntent =
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pendingIntent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                restartIntent,
+                PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        runCatching {
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            alarmManager.set(AlarmManager.RTC, System.currentTimeMillis() + 300L, pendingIntent)
+        }.onFailure { AppLog.w("Update", "schedule restart failed", it) }
+        finishAffinity()
+        Process.killProcess(Process.myPid())
     }
 
     private fun maybeStartAutoUpdateCheck() {
