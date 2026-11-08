@@ -43,9 +43,13 @@ object ApkUpdater {
     private const val CHANGELOG_URL = "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
     /** 直连失败时套用的国内 GitHub 前缀代理（用于 API 与 APK 下载）。 */
     private const val GH_PROXY_PREFIX = "https://gh-proxy.com/"
-    /** 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
+    private const val GHFAST_PREFIX = "https://ghfast.top/"
+    private const val GHPROXY_NET_PREFIX = "https://ghproxy.net/"
+    /** API 检查用的线路：直连 + gh-proxy（ghfast/ghproxy.net 的 API 接口不可用，只用于下载）。 */
+    private val API_MIRRORS = listOf("", GH_PROXY_PREFIX)
+    /** APK 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
     private val DOWNLOAD_MIRRORS =
-        listOf("", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/")
+        listOf("", GH_PROXY_PREFIX, GHFAST_PREFIX, GHPROXY_NET_PREFIX)
     private const val DOWNLOAD_CONNECTIONS = 8
     private const val PROBE_BYTES = 256L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
@@ -239,15 +243,17 @@ object ApkUpdater {
         return "$url${sep}_ts=${System.currentTimeMillis()}"
     }
 
+    /** 统一所有检查请求：绕过代理缓存、不发 ETag 协商。 */
+    private fun openRequest(url: String, accept: String? = null): Request.Builder =
+        Request.Builder()
+            .url(cacheBusted(url))
+            .apply { accept?.let { header("Accept", it) } }
+            .header("Cache-Control", "no-cache, no-store")
+            .header("Pragma", "no-cache")
+            .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
+
     private fun fetchText(url: String): String {
-        val req =
-            Request.Builder()
-                .url(cacheBusted(url))
-                .header("Cache-Control", "no-cache, no-store")
-                .header("Pragma", "no-cache")
-                .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
-                .get()
-                .build()
+        val req = openRequest(url).get().build()
         val res = okHttp.newCall(req).execute()
         res.use { r ->
             check(r.isSuccessful) { "HTTP ${r.code} ${r.message}" }
@@ -261,7 +267,7 @@ object ApkUpdater {
      */
     private suspend fun fetchTestChannelUpdate(): RemoteUpdate {
         var lastError: Throwable? = null
-        for (base in listOf("", GH_PROXY_PREFIX)) {
+        for (base in API_MIRRORS) {
             val text: String? =
                 runCatching { retryFetch { fetchText(base + RELEASES_LIST_URL) } }
                     .getOrElse { lastError = it; null }
@@ -283,12 +289,7 @@ object ApkUpdater {
     /** 从 GitHub Releases API 取最新正式版：版本号、更新说明、APK 直链。 */
     private fun fetchLatestReleaseOnce(url: String): RemoteUpdate {
         val req =
-            Request.Builder()
-                .url(cacheBusted(url))
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "blbl-android/${BuildConfig.VERSION_NAME}")
-                .header("Cache-Control", "no-cache, no-store")
-                .header("Pragma", "no-cache")
+            openRequest(url, accept = "application/vnd.github+json")
                 .get()
                 .build()
         val call = okHttp.newCall(req)
@@ -324,27 +325,35 @@ object ApkUpdater {
                 if (apkUrl != null) break
             }
         }
+        val meta = parseReleaseMetadata(changelog)
+        return RemoteUpdate(
+            versionName = versionName,
+            changelog = changelog,
+            apkUrl = apkUrl ?: apkUrlFor(versionName),
+            cdnUrl = meta.cdnUrl,
+            buildNumber = meta.buildNumber,
+        )
+    }
+
+    private data class ReleaseMetadata(val buildNumber: Long = 0L, val cdnUrl: String? = null)
+
+    /** 从发布说明里提取给程序用的标记（Build: N / CDN: url）；这些行不会展示给用户。 */
+    private fun parseReleaseMetadata(raw: String): ReleaseMetadata {
         val buildNumber =
             Regex("""(?im)^\s*Build\s*[:：]\s*([0-9]+)""")
-                .find(changelog)
+                .find(raw)
                 ?.groupValues
                 ?.getOrNull(1)
                 ?.toLongOrNull()
                 ?: 0L
         val cdnUrl =
             Regex("""(?im)^\s*CDN\s*[:：]\s*(https://[^\s)]+)""")
-                .find(changelog)
+                .find(raw)
                 ?.groupValues
                 ?.getOrNull(1)
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-        return RemoteUpdate(
-            versionName = versionName,
-            changelog = changelog,
-            apkUrl = apkUrl ?: apkUrlFor(versionName),
-            cdnUrl = cdnUrl,
-            buildNumber = buildNumber,
-        )
+        return ReleaseMetadata(buildNumber = buildNumber, cdnUrl = cdnUrl)
     }
 
     suspend fun fetchLatestUpdateFromChangelog(
