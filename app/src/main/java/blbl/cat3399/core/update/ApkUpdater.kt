@@ -50,7 +50,7 @@ object ApkUpdater {
     /** APK 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
     private val DOWNLOAD_MIRRORS =
         listOf("", GH_PROXY_PREFIX, GHFAST_PREFIX, GHPROXY_NET_PREFIX)
-    private const val DOWNLOAD_CONNECTIONS = 8
+    private const val DOWNLOAD_CONNECTIONS = 12
     private const val PROBE_BYTES = 256L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
     private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
@@ -536,46 +536,45 @@ object ApkUpdater {
     private fun labelOf(url: String): String =
         runCatching { java.net.URI(url).host ?: url }.getOrDefault(url)
 
-    /** 每个线路抓 256KB：既确认这条线路通，也顺便量出它的实际速度。 */
-    private suspend fun probeMirrors(urls: List<String>): List<MirrorProbe> {
-        val results = ArrayList<MirrorProbe>(urls.size)
-        for (u in urls) {
-            currentCoroutineContext().ensureActive()
-            val probe =
-                runCatching {
-                    val req =
-                        Request.Builder()
-                            .url(u)
-                            .header("Range", "bytes=0-$PROBE_BYTES")
-                            .get()
-                            .build()
-                    val startedAt = System.currentTimeMillis()
-                    probeClient.newCall(req).execute().use { r ->
-                        if (!r.isSuccessful) return@use null
-                        val body = r.body ?: return@use null
-                        var read = 0L
-                        val buf = ByteArray(16 * 1024)
-                        body.byteStream().use { input ->
-                            while (read < PROBE_BYTES) {
-                                val n = input.read(buf)
-                                if (n <= 0) break
-                                read += n
+    /** 每个线路抓 256KB：既确认这条线路通，也顺便量出它的实际速度。所有线路同时测。 */
+    private suspend fun probeMirrors(urls: List<String>): List<MirrorProbe> =
+        coroutineScope {
+            urls.map { u ->
+                async {
+                    currentCoroutineContext().ensureActive()
+                    runCatching {
+                        val req =
+                            Request.Builder()
+                                .url(u)
+                                .header("Range", "bytes=0-$PROBE_BYTES")
+                                .get()
+                                .build()
+                        val startedAt = System.currentTimeMillis()
+                        probeClient.newCall(req).execute().use { r ->
+                            if (!r.isSuccessful) return@use null
+                            val body = r.body ?: return@use null
+                            var read = 0L
+                            val buf = ByteArray(16 * 1024)
+                            body.byteStream().use { input ->
+                                while (read < PROBE_BYTES) {
+                                    val n = input.read(buf)
+                                    if (n <= 0) break
+                                    read += n
+                                }
                             }
+                            if (read <= 0L) return@use null
+                            val elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L)
+                            MirrorProbe(
+                                url = u,
+                                totalBytes = parseTotalBytes(r.header("Content-Range"), body.contentLength()),
+                                supportsRange = r.code == 206,
+                                bytesPerSecond = read * 1_000L / elapsedMs,
+                            )
                         }
-                        if (read <= 0L) return@use null
-                        val elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L)
-                        MirrorProbe(
-                            url = u,
-                            totalBytes = parseTotalBytes(r.header("Content-Range"), body.contentLength()),
-                            supportsRange = r.code == 206,
-                            bytesPerSecond = read * 1_000L / elapsedMs,
-                        )
-                    }
-                }.getOrNull() ?: continue
-            results.add(probe)
+                    }.getOrNull()
+                }
+            }.awaitAll().filterNotNull()
         }
-        return results
-    }
 
     private fun parseTotalBytes(contentRange: String?, contentLength: Long): Long {
         val fromRange = contentRange?.substringAfterLast('/')?.trim()?.toLongOrNull()
@@ -633,34 +632,50 @@ object ApkUpdater {
                         else total * (index + 1) / connections - 1
                     if (end < start) return@async
 
-                    val req =
-                        Request.Builder()
-                            .url(probe.url)
-                            .header("Range", "bytes=$start-$end")
-                            .get()
-                            .build()
-                    okHttp.newCall(req).execute().use { r ->
-                        check(r.code == 206) { "该线路不支持分段下载（HTTP ${r.code}）" }
-                        val body = r.body ?: error("empty body")
-                        RandomAccessFile(part, "rw").use { raf ->
-                            raf.seek(start)
-                            body.byteStream().use { input ->
-                                val buf = ByteArray(32 * 1024)
-                                var pos = start
-                                while (pos <= end) {
-                                    currentCoroutineContext().ensureActive()
-                                    val n = input.read(buf)
-                                    if (n <= 0) break
-                                    val writeLen = minOf(n.toLong(), end - pos + 1).toInt()
-                                    raf.write(buf, 0, writeLen)
-                                    pos += writeLen
-                                    downloaded.addAndGet(writeLen.toLong())
-                                    emitProgress()
+                    // 单段失败重试 2 次，避免某条连接中途断了整个包就报废
+                    var lastError: Throwable? = null
+                    var done = false
+                    repeat(3) { attempt ->
+                        if (done) return@repeat
+                        var addedThisAttempt = 0L
+                        runCatching {
+                            val req =
+                                Request.Builder()
+                                    .url(probe.url)
+                                    .header("Range", "bytes=$start-$end")
+                                    .get()
+                                    .build()
+                            okHttp.newCall(req).execute().use { r ->
+                                check(r.code == 206) { "该线路不支持分段下载（HTTP ${r.code}）" }
+                                val body = r.body ?: error("empty body")
+                                RandomAccessFile(part, "rw").use { raf ->
+                                    raf.seek(start)
+                                    body.byteStream().use { input ->
+                                        val buf = ByteArray(32 * 1024)
+                                        var pos = start
+                                        while (pos <= end) {
+                                            currentCoroutineContext().ensureActive()
+                                            val n = input.read(buf)
+                                            if (n <= 0) break
+                                            val writeLen = minOf(n.toLong(), end - pos + 1).toInt()
+                                            raf.write(buf, 0, writeLen)
+                                            pos += writeLen
+                                            addedThisAttempt += writeLen
+                                            downloaded.addAndGet(writeLen.toLong())
+                                            emitProgress()
+                                        }
+                                        check(pos == end + 1) { "分段未下载完整（$start-$end）" }
+                                    }
                                 }
-                                check(pos == end + 1) { "分段未下载完整（$start-$end）" }
                             }
+                            done = true
+                        }.getOrElse {
+                            lastError = it
+                            downloaded.addAndGet(-addedThisAttempt)
+                            if (attempt < 2) delay(500L * (attempt + 1))
                         }
                     }
+                    if (!done) throw (lastError ?: error("segment failed"))
                 }
             }.awaitAll()
         }
