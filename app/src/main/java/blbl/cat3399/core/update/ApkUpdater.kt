@@ -276,7 +276,7 @@ object ApkUpdater {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val update = runCatching { parseReleaseObject(obj, TEST_TAG_PREFIX) }.getOrNull() ?: continue
-                return update
+                return withVersionHistory(update)
             }
             return RemoteUpdate(
                 versionName = BuildConfig.VERSION_NAME,
