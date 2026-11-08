@@ -181,17 +181,15 @@ object ApkUpdater {
             // 测试版（debug 包）只走测试通道，永远不下正式包，避免“测试版被升级成正式版”。
             if (BuildConfig.DEBUG) return@withContext fetchTestChannelUpdate()
 
-            // 1) GitHub API 直连
-            runCatching { retryFetch { fetchLatestReleaseOnce(RELEASES_API_URL) } }
-                .getOrNull()
-                ?.let { return@withContext withVersionHistory(it) }
+            // 1) releases 列表：直连或走代理，过滤掉 pre-release，最新的在最前
+            for (base in listOf("", GH_PROXY_PREFIX)) {
+                val list =
+                    runCatching { retryFetch { fetchReleaseList(base, prerelease = false) } }
+                        .getOrNull() ?: continue
+                if (list.isNotEmpty()) return@withContext list.first().copy(versions = list)
+            }
 
-            // 2) GitHub API 走国内前缀代理
-            runCatching { retryFetch { fetchLatestReleaseOnce(GH_PROXY_PREFIX + RELEASES_API_URL) } }
-                .getOrNull()
-                ?.let { return@withContext withVersionHistory(it) }
-
-            // 3) 只能拿到 CHANGELOG 时：版本号照旧可用，下载地址按版本号推导
+            // 2) 只能拿到 CHANGELOG 时：版本号照旧可用，下载地址按版本号推导
             //    （国内直连 api.github.com 常被拦，这一步保证「检查得到新版本」）
             var changelogError: Throwable? = null
             for (url in listOf(CHANGELOG_PROXY_URL, CHANGELOG_MIRROR_URL, TEST_CHANGELOG_URL)) {
@@ -268,22 +266,34 @@ object ApkUpdater {
     private suspend fun fetchTestChannelUpdate(): RemoteUpdate {
         var lastError: Throwable? = null
         for (base in API_MIRRORS) {
-            val text: String? =
-                runCatching { retryFetch { fetchText(base + RELEASES_LIST_URL) } }
-                    .getOrElse { lastError = it; null }
-            if (text == null) continue
-            val arr = runCatching { org.json.JSONArray(text) }.getOrNull() ?: continue
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val update = runCatching { parseReleaseObject(obj, TEST_TAG_PREFIX) }.getOrNull() ?: continue
-                return withVersionHistory(update)
+            val versions =
+                runCatching { retryFetch { fetchReleaseList(base, prerelease = true) } }
+                    .getOrElse { lastError = it; emptyList() }
+                    .filter { it.versionName.startsWith(TEST_TAG_PREFIX) }
+            if (versions.isNotEmpty()) {
+                return versions.first().copy(versions = versions)
             }
+            if (lastError != null) continue
             return RemoteUpdate(
                 versionName = BuildConfig.VERSION_NAME,
                 changelog = "测试通道暂时没有新的测试包。",
             )
         }
         throw lastError ?: error("检查更新失败，请检查网络")
+    }
+
+    /** 拉 releases 列表，按时间倒序解析；prerelease=true 保留预发布，false 只取正式包。 */
+    private fun fetchReleaseList(base: String, prerelease: Boolean): List<RemoteUpdate> {
+        val text = fetchText(base + RELEASES_LIST_URL)
+        val arr = org.json.JSONArray(text)
+        val out = mutableListOf<RemoteUpdate>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            if (obj.optBoolean("prerelease", false) != prerelease) continue
+            val prefix = if (prerelease) TEST_TAG_PREFIX else null
+            runCatching { parseReleaseObject(obj, prefix) }.getOrNull()?.let { out.add(it) }
+        }
+        return out
     }
 
     /** 从 GitHub Releases API 取最新正式版：版本号、更新说明、APK 直链。 */
