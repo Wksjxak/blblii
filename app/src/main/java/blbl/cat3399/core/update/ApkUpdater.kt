@@ -269,7 +269,6 @@ object ApkUpdater {
             val versions =
                 runCatching { retryFetch { fetchReleaseList(base, prerelease = true) } }
                     .getOrElse { lastError = it; emptyList() }
-                    .filter { it.versionName.startsWith(TEST_TAG_PREFIX) }
             if (versions.isNotEmpty()) {
                 return versions.first().copy(versions = versions)
             }
@@ -812,7 +811,11 @@ object ApkUpdater {
     }
 
     private fun parseVersion(raw: String): List<Int>? {
-        val cleaned = raw.trim().removePrefix("v")
+        // 跳过 test-/v 等前缀，取开头连续的数字段
+        val cleaned = raw.trim()
+            .removePrefix("v")
+            .removePrefix("V")
+            .removePrefix("test-")
         val digitsOnly =
             cleaned.takeWhile { ch ->
                 ch.isDigit() || ch == '.'
