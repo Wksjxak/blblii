@@ -90,6 +90,8 @@ jobs:
           RELEASE_TAG: ${{ startsWith(inputs.version_name, 'v') || startsWith(inputs.version_name, 'test-') && inputs.version_name || format('v{0}', inputs.version_name) }}
           CHANGELOG: ${{ inputs.changelog }}
         run: |
+          PRERELEASE_FLAG=""
+          if [[ "$RELEASE_TAG" == test-* ]]; then PRERELEASE_FLAG="--prerelease"; fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             if [ -n "${CHANGELOG:-}" ]; then
               printf '%s' "$CHANGELOG" > changelog.md
@@ -98,9 +100,9 @@ jobs:
           else
             if [ -n "${CHANGELOG:-}" ]; then
               printf '%s' "$CHANGELOG" > changelog.md
-              gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
+              gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
             else
-              gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes --target "$GITHUB_SHA"
+              gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --generate-notes --target "$GITHUB_SHA"
             fi
           fi
           gh release upload "$RELEASE_TAG" "app/build/outputs/apk/debug/app-debug.apk#blbl-android-${VERSION_NAME}-debug.apk" --clobber
