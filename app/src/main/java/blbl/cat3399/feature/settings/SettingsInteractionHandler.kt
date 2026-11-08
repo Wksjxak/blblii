@@ -3153,7 +3153,33 @@ class SettingsInteractionHandler(
             context = activity,
             title = "配置二维码",
             cancelable = true,
-            actions = listOf(PopupAction(role = PopupActionRole.NEGATIVE, text = "关闭")),
+            actions = listOf(
+                PopupAction(role = PopupActionRole.NEUTRAL, text = "保存为图片") {
+                    launchDocumentExport(
+                        request = CreateDocumentRequest(mimeType = "image/png", fileName = "blbl-config-qr.png"),
+                        onUriSelected = { uri ->
+                            launchIoJob(
+                                startToast = "正在保存二维码…",
+                                failureLogMessage = "save qr failed",
+                                failureToastPrefix = "保存失败",
+                                work = {
+                                    activity.contentResolver.openOutputStream(uri)?.use { out ->
+                                        bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                                    } ?: error("无法写入")
+                                },
+                            ) { AppToast.showLong(activity, "二维码已保存为图片") }
+                        },
+                        onFallbackToLocal = {
+                            val dir = java.io.File(activity.getExternalFilesDir(null), "exports").apply { mkdirs() }
+                            val f = java.io.File(dir, "blbl-config-qr.png")
+                            f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                            AppToast.showLong(activity, "已保存：${f.absolutePath}")
+                        },
+                        logTag = "config",
+                    )
+                },
+                PopupAction(role = PopupActionRole.NEGATIVE, text = "关闭"),
+            ),
             autoFocus = true,
         ) { ctx ->
             android.widget.ImageView(ctx).apply {
