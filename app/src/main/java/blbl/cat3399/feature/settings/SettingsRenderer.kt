@@ -363,6 +363,12 @@ class SettingsRenderer(
                         if (prefs.playerSeamlessQualitySwitchEnabled) "开" else "关",
                         null,
                     ),
+                    SettingEntry(
+                        SettingId.PlayerLowDataQualityEnabled,
+                        "移动数据降清晰度",
+                        if (prefs.playerLowDataQualityEnabled) "开" else "关",
+                        "用手机流量时自动降到720P，Wi-Fi保持设置",
+                    ),
                     SettingEntry(SettingId.PlayerSpeed, "默认播放速度", String.format(java.util.Locale.US, "%.2fx", prefs.playerSpeed), "档位随下方播放速度模式"),
                     SettingEntry(
                         SettingId.PlaybackSpeedMode,

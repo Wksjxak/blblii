@@ -1153,7 +1153,7 @@ internal fun PlayerActivity.applyPerVideoPreferredQn(detail: VideoDetail, cid: L
             isPgcLikePlayback() -> prefs.playerPreferredQnPgc
             isPortraitVideo -> prefs.playerPreferredQnPortrait
             else -> prefs.playerPreferredQn
-        }
+        }.let { blbl.cat3399.core.net.QualityByNetwork.apply(this, it) }
     if (session.preferredQn != preferredQn) {
         session = session.copy(preferredQn = preferredQn)
     }

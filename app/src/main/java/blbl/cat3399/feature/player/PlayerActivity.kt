@@ -808,7 +808,7 @@ class PlayerActivity : BaseActivity() {
             preferCodec = prefs.playerPreferredCodec,
             seamlessQualitySwitchEnabled = prefs.playerSeamlessQualitySwitchEnabled,
             preferAudioId = prefs.playerPreferredAudioId,
-            preferredQn = if (isPgcLikePlayback()) prefs.playerPreferredQnPgc else prefs.playerPreferredQn,
+            preferredQn = blbl.cat3399.core.net.QualityByNetwork.apply(this, if (isPgcLikePlayback()) prefs.playerPreferredQnPgc else prefs.playerPreferredQn),
             targetQn = 0,
             playbackModeOverride = null,
             subtitleEnabled = prefs.subtitleEnabledDefault,

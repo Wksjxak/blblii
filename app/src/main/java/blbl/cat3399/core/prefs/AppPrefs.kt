@@ -368,6 +368,11 @@ class AppPrefs(context: Context) {
         }
         set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN_PORTRAIT, value).apply()
 
+    /** 移动数据下自动降到 720P，Wi-Fi 保持用户设置。 */
+    var playerLowDataQualityEnabled: Boolean
+        get() = prefs.getBoolean(KEY_PLAYER_LOW_DATA_QUALITY_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_PLAYER_LOW_DATA_QUALITY_ENABLED, value).apply()
+
     var playerPreferredCodec: String
         get() = prefs.getString(KEY_PLAYER_CODEC, "AVC") ?: "AVC"
         set(value) = prefs.edit().putString(KEY_PLAYER_CODEC, value).apply()
@@ -1287,6 +1292,7 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_PREFERRED_QN = "player_preferred_qn"
         private const val KEY_PLAYER_PREFERRED_QN_PGC = "player_preferred_qn_pgc"
         private const val KEY_PLAYER_PREFERRED_QN_PORTRAIT = "player_preferred_qn_portrait"
+        private const val KEY_PLAYER_LOW_DATA_QUALITY_ENABLED = "player_low_data_quality_enabled"
         private const val KEY_PLAYER_CODEC = "player_codec"
         private const val KEY_PLAYER_SEAMLESS_QUALITY_SWITCH_ENABLED = "player_seamless_quality_switch_enabled"
         private const val KEY_PLAYER_RENDER_VIEW = "player_render_view"

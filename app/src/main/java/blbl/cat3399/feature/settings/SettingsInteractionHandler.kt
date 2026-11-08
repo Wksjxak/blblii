@@ -1275,6 +1275,12 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.PlayerLowDataQualityEnabled -> {
+                prefs.playerLowDataQualityEnabled = !prefs.playerLowDataQualityEnabled
+                AppToast.show(activity, "移动数据降清晰度：${if (prefs.playerLowDataQualityEnabled) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.PlayerCdnPreference -> {
                 val options =
                     listOf(

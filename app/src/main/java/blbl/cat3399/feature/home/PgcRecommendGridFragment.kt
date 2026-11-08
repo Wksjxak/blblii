@@ -16,6 +16,7 @@ import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.BangumiSeason
 import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.ui.AppToast
+import blbl.cat3399.core.ui.ErrorOverlay
 import blbl.cat3399.core.ui.TabContentSwitchFocusHost
 import blbl.cat3399.core.ui.DpadGridController
 import blbl.cat3399.core.ui.FocusTreeUtils
@@ -357,6 +358,7 @@ class PgcRecommendGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTa
 
                 val filtered = fetched.items.filter { loadedSeasonIds.add(it.seasonId) }
                 if (isRefresh) adapter.submit(filtered) else adapter.append(filtered)
+                if (filtered.isNotEmpty() || adapter.itemCount > 0) _binding?.root?.let { ErrorOverlay.hide(it) }
 
                 _binding?.let { b ->
                     b.recycler.postIfAlive(isAlive = { _binding === b && isResumed }) {
@@ -387,7 +389,11 @@ class PgcRecommendGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTa
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 AppLog.e("PgcRecommend", "load failed source=${source.logName} key=$nextKey", t)
-                context?.let { AppToast.show(it, "加载失败，可查看 Logcat(标签 BLBL)") }
+                if (adapter.itemCount == 0) {
+                    _binding?.root?.let { ErrorOverlay.show(it) { resetAndLoad(fromUserRefresh = true) } }
+                } else {
+                    context?.let { AppToast.show(it, "加载失败，可查看 Logcat(标签 BLBL)") }
+                }
             } finally {
                 if (token == requestToken) _binding?.swipeRefresh?.isRefreshing = false
                 isLoadingMore = false
