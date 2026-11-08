@@ -194,10 +194,16 @@ class SettingsInteractionHandler(
                     ) {
                         startConfigExport(AppConfigBackup.ExportMode.CONFIG_WITH_CREDENTIALS)
                     },
+                    PopupAction(
+                        role = PopupActionRole.NEUTRAL,
+                        text = "导出二维码",
+                    ) {
+                        startQrExport()
+                    },
                     PopupAction(role = PopupActionRole.NEGATIVE, text = "关闭"),
                     PopupAction(
                         role = PopupActionRole.POSITIVE,
-                        text = "导入配置",
+                        text = "导入配置/二维码图片",
                     ) {
                         startImportConfig()
                     },
@@ -270,7 +276,15 @@ class SettingsInteractionHandler(
     private fun startImportConfig() {
         if (!ensureConfigTransferIdle()) return
         try {
-            importConfigLauncher.launch(arrayOf(AppConfigBackup.JSON_MIME, "text/plain", "application/octet-stream"))
+            importConfigLauncher.launch(
+                arrayOf(
+                    AppConfigBackup.JSON_MIME,
+                    "text/plain",
+                    "application/octet-stream",
+                    "image/png",
+                    "image/jpeg",
+                ),
+            )
         } catch (e: ActivityNotFoundException) {
             AppLog.w("Settings", "OpenDocument not supported", e)
             AppToast.showLong(activity, "当前设备不支持导入配置")
@@ -288,9 +302,12 @@ class SettingsInteractionHandler(
                 failureLogMessage = "import config read failed",
                 failureToastPrefix = "读取配置失败",
                 work = {
+                    val mime = activity.contentResolver.getType(uri).orEmpty()
                     val text =
                         activity.contentResolver.openInputStream(uri)?.use { input ->
-                            input.readBytes().toString(Charsets.UTF_8).removePrefix("\uFEFF")
+                            val bytes = input.readBytes()
+                            if (mime.startsWith("image/")) decodeQrFromImageBytes(bytes)
+                            else bytes.toString(Charsets.UTF_8).removePrefix("\uFEFF")
                         } ?: error("无法读取配置文件")
                     AppConfigBackup.parse(text)
                 },
@@ -3119,5 +3136,60 @@ class SettingsInteractionHandler(
                 renderer.showSection(sectionIndex, focusId = focusId)
             },
         )
+    }
+
+    private fun startQrExport() {
+        if (!ensureConfigTransferIdle()) return
+        val prepared = prepareConfigExport(AppConfigBackup.ExportMode.CONFIG_ONLY)
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(bos).use { it.write(prepared.jsonText.toByteArray(Charsets.UTF_8)) }
+        val compressed = android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+        if (compressed.length > 1500) {
+            AppToast.showLong(activity, "配置太大（约${compressed.length}字符），二维码装不下，请用「导出配置」文件方式")
+            return
+        }
+        val bmp = renderQrBitmap("BLBLQR:$compressed", 720)
+        AppPopup.custom(
+            context = activity,
+            title = "配置二维码",
+            cancelable = true,
+            actions = listOf(PopupAction(role = PopupActionRole.NEGATIVE, text = "关闭")),
+            autoFocus = true,
+        ) { ctx ->
+            android.widget.ImageView(ctx).apply {
+                setImageBitmap(bmp)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            }
+        }
+    }
+
+    private fun renderQrBitmap(text: String, size: Int): android.graphics.Bitmap {
+        val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 1)
+        val matrix = com.google.zxing.MultiFormatWriter()
+            .encode(text, com.google.zxing.BarcodeFormat.QR_CODE, size, size, hints)
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.RGB_565)
+        for (x in 0 until size) for (y in 0 until size) {
+            bmp.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        }
+        return bmp
+    }
+
+    private fun decodeQrFromImageBytes(bytes: ByteArray): String {
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: error("无法识别图片")
+        val w = bmp.width; val h = bmp.height
+        val pixels = IntArray(w * h)
+        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+        val source = com.google.zxing.RGBLuminanceSource(w, h, pixels)
+        val binary = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
+        val result = com.google.zxing.qrcode.QRCodeReader().decode(binary)
+        var text = result.text
+        if (text.startsWith("BLBLQR:")) {
+            val data = android.util.Base64.decode(text.removePrefix("BLBLQR:"), android.util.Base64.NO_WRAP)
+            text = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(data)).use {
+                it.readBytes().toString(Charsets.UTF_8)
+            }
+        }
+        return text
     }
 }
