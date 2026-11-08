@@ -5,5 +5,5 @@
     android:layout_height="wrap_content"
     android:lineSpacingExtra="1dp"
     android:textColor="?android:attr/textColorSecondary"
-    android:textSize="14sp" />
+    android:textSize="18sp" />
 

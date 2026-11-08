@@ -33,6 +33,6 @@
             android:lineSpacingExtra="1dp"
             android:maxLines="3"
             android:textColor="@android:color/black"
-            android:textSize="14sp" />
+            android:textSize="18sp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
