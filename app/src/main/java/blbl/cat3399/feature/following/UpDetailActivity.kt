@@ -41,6 +41,7 @@ import blbl.cat3399.core.ui.popup.AppPopup
 import blbl.cat3399.core.ui.popup.PopupModalSizing
 import blbl.cat3399.core.util.Format
 import blbl.cat3399.databinding.ActivityUpDetailBinding
+import blbl.cat3399.databinding.IncludeVideoCommentImageViewerContentBinding
 import blbl.cat3399.databinding.IncludeVideoCommentsPanelContentBinding
 import blbl.cat3399.databinding.ViewVideoCommentsPopupBinding
 import blbl.cat3399.feature.login.QrLoginActivity
@@ -53,6 +54,8 @@ import blbl.cat3399.feature.video.VideoCardDismissBehavior
 import blbl.cat3399.feature.video.VideoCardVisibilityFilter
 import blbl.cat3399.feature.video.buildPagedVideoCardPlaybackHandle
 import blbl.cat3399.feature.video.buildVideoCardPlaybackHandle
+import blbl.cat3399.feature.video.comment.VideoCommentImageViewerController
+import blbl.cat3399.feature.video.comment.VideoCommentImageViewerViews
 import blbl.cat3399.feature.video.comment.VideoCommentsPanelController
 import blbl.cat3399.feature.video.comment.VideoCommentsPanelViews
 import blbl.cat3399.feature.video.defaultVideoCardPlaylistItem
@@ -1710,12 +1713,20 @@ class UpDetailActivity : BaseActivity() {
     }
 
     /** 正文段落的焦点态背景：TV 上必须能看出当前滚到哪一段 */
+    /**
+     * 焦点态只用一圈描边，不整块铺半透明灰。
+     * 正文某块可能包含多段文字和多张图，整块染色会让灰底看起来异常放大。
+     */
     private fun paragraphFocusBg(): android.graphics.drawable.Drawable =
         android.graphics.drawable.StateListDrawable().apply {
-            addState(
-                intArrayOf(android.R.attr.state_focused),
-                android.graphics.drawable.ColorDrawable(0x1FFFFFFF),
-            )
+            val radius = 8 * resources.displayMetrics.density
+            val outline =
+                android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = radius
+                    setColor(0x00000000)
+                    setStroke((2 * resources.displayMetrics.density).toInt(), 0x66FFFFFF)
+                }
+            addState(intArrayOf(android.R.attr.state_focused), outline)
             addState(intArrayOf(), null)
         }
 
@@ -1806,7 +1817,8 @@ class UpDetailActivity : BaseActivity() {
                 current.add(para)
                 if (para is DynamicParagraph.Separator) return@forEach
                 contentCount++
-                if (contentCount >= groupSize) {
+                // 图片段之后强制断块：避免一个焦点块里堆多张图，块高得离谱
+                if (contentCount >= groupSize || para is DynamicParagraph.Image) {
                     blocks.add(current)
                     current = ArrayList()
                     contentCount = 0
@@ -1995,6 +2007,7 @@ class UpDetailActivity : BaseActivity() {
             return
         }
         var controller: VideoCommentsPanelController? = null
+        var commentImageViewer: VideoCommentImageViewerController? = null
         AppPopup.custom(
             context = this,
             title = "动态评论",
@@ -2015,12 +2028,27 @@ class UpDetailActivity : BaseActivity() {
             onDismiss = {
                 controller?.release()
                 controller = null
+                commentImageViewer = null
             },
             onBackPressed = { controller?.handleBack() == true },
             content = { dialogCtx ->
                 val b = ViewVideoCommentsPopupBinding.inflate(android.view.LayoutInflater.from(dialogCtx))
                 val cv = IncludeVideoCommentsPanelContentBinding.bind(b.commentsPopupContent)
-                b.commentImageViewer.visibility = android.view.View.GONE
+                // 动态评论区也要能看大图，否则评论里的图片点了没反应
+                val imageViews =
+                    IncludeVideoCommentImageViewerContentBinding.bind(b.commentImageViewer.getChildAt(0))
+                commentImageViewer =
+                    VideoCommentImageViewerController(
+                        views =
+                            VideoCommentImageViewerViews(
+                                container = b.commentImageViewer,
+                                image = imageViews.ivCommentImage,
+                                previous = imageViews.ivCommentImagePrev,
+                                next = imageViews.ivCommentImageNext,
+                            ),
+                        currentFocusProvider = { b.root.findFocus() },
+                        fallbackFocusProvider = { cv.recyclerComments },
+                    )
                 controller = VideoCommentsPanelController(
                     context = this,
                     scope = lifecycleScope,
@@ -2034,7 +2062,7 @@ class UpDetailActivity : BaseActivity() {
                     ),
                     oidProvider = { oid },
                     upMidProvider = { mid },
-                    imageViewer = null,
+                    imageViewer = commentImageViewer,
                     isActive = { true },
                     commentType = item.commentType,
                     // 动态评论区用独立字号，不占用视频评论区设置
