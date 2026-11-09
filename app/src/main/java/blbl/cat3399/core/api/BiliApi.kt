@@ -1689,6 +1689,7 @@ object BiliApi {
         val cards = ArrayList<DynamicFeedItem>()
         for (i in 0 until items.length()) {
             val it = items.optJSONObject(i) ?: continue
+            try {
             val trackId = it.optString("track_id", it.optString("trackid", "")).trim().takeIf { value -> value.isNotBlank() }
             val modules = it.optJSONObject("modules") ?: continue
             val moduleDynamic = modules.optJSONObject("module_dynamic") ?: continue
@@ -1700,7 +1701,7 @@ object BiliApi {
             val ownerMid = author?.optLong("mid")?.takeIf { v -> v > 0 }
             val authorPubTs = author?.optLong("pub_ts")?.takeIf { v -> v > 0 }
 
-            val archive = major.optJSONObject("archive")
+            val archive = major?.optJSONObject("archive")
             if (archive != null) {
                 val bvid = archive.optString("bvid", "")
                 if (bvid.isBlank()) continue
@@ -1739,7 +1740,7 @@ object BiliApi {
                 continue
             }
 
-            val ugcSeason = major.optJSONObject("ugc_season")
+            val ugcSeason = major?.optJSONObject("ugc_season")
             if (ugcSeason != null) {
                 val jumpUrl = ugcSeason.optString("jump_url", "").takeIf { u -> u.isNotBlank() }
                 val aid = ugcSeason.optLong("aid").takeIf { v -> v > 0 }
@@ -1859,6 +1860,9 @@ object BiliApi {
                         pubTs = authorPubTs,
                     ),
                 )
+            }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "parseDynamicFeedItems skip item $i: ${e.message}")
             }
         }
         return cards

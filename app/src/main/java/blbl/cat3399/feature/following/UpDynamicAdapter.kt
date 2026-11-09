@@ -20,6 +20,7 @@ import blbl.cat3399.databinding.ItemVideoCardBinding
  */
 class UpDynamicAdapter(
     private val onVideoClick: (VideoCard) -> Unit,
+    private val onRichClick: (DynamicFeedItem.Rich) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = ArrayList<DynamicFeedItem>()
@@ -59,7 +60,7 @@ class UpDynamicAdapter(
                 ItemVideoCardBinding.inflate(inflater, parent, false),
                 onVideoClick,
             )
-            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false))
+            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick)
         }
     }
 
@@ -112,9 +113,12 @@ class UpDynamicAdapter(
 
     class RichVh(
         private val binding: ItemUpDynamicRichBinding,
+        private val onClick: (DynamicFeedItem.Rich) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: DynamicFeedItem.Rich) {
             binding.tvRichText.text = item.text.ifBlank { "图文动态" }
+            binding.tvRichTime.text = item.pubTs?.let { Format.pubDateText(it) }.orEmpty()
+            binding.root.setOnClickListener { onClick(item) }
             binding.rowRichImages.visibility =
                 if (item.images.isEmpty()) View.GONE else View.VISIBLE
             val imgs = listOf(binding.ivRichImg1, binding.ivRichImg2, binding.ivRichImg3)

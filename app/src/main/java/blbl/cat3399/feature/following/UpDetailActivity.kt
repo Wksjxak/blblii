@@ -379,6 +379,12 @@ class UpDetailActivity : BaseActivity() {
                         openDetailBeforePlay = BiliClient.prefs.playerOpenDetailBeforePlay,
                     )
                 },
+                onRichClick = { item ->
+                    val url = "https://www.bilibili.com/opus/${item.dynId}"
+                    runCatching {
+                        startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setData(android.net.Uri.parse(url)))
+                    }
+                },
             )
 
         sectionAdapter =
