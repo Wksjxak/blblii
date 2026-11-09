@@ -45,7 +45,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp" />
 
-            <HorizontalScrollView
+            <blbl.cat3399.core.ui.popup.ClickPassHorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -61,7 +61,7 @@
                     android:orientation="horizontal"
                     android:paddingTop="2dp"
                     android:paddingBottom="2dp" />
-            </HorizontalScrollView>
+            </blbl.cat3399.core.ui.popup.ClickPassHorizontalScrollView>
         </blbl.cat3399.core.ui.popup.PopupModalLayout>
     </com.google.android.material.card.MaterialCardView>
 </FrameLayout>
