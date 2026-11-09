@@ -6,6 +6,7 @@
     android:layout_marginBottom="@dimen/player_comment_item_margin_bottom"
     android:clickable="true"
     android:focusable="true"
+    android:descendantFocusability="afterDescendants"
     android:stateListAnimator="@animator/blbl_comment_card_focus_scale"
     app:cardBackgroundColor="@android:color/black"
     app:cardCornerRadius="@dimen/player_comment_item_corner_radius"
