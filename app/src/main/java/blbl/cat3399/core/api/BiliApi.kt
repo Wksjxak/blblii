@@ -1826,6 +1826,7 @@ object BiliApi {
             val images = ArrayList<String>()
             var title: String? = null
             var isOpus = false
+            var opusId: Long? = null
 
             major?.let { m ->
                 // 先从 major 自身取 title（很多类型通用），再补 opus 内部
@@ -1841,6 +1842,9 @@ object BiliApi {
                             opus.optJSONObject("display")?.optString("title", "")?.trim().orEmpty()
                         }.ifBlank { null }
                     }
+                    // opus 的评论 oid 是 opus_id，不是动态 id
+                    opusId = opus.optLong("opus_id", 0L).takeIf { it > 0L }
+                        ?: opus.optLong("id", 0L).takeIf { it > 0L }
                     opus.optJSONArray("pics")?.let { arr ->
                         for (k in 0 until arr.length()) {
                             val u = arr.optJSONObject(k)?.optString("url", "")
@@ -1864,11 +1868,12 @@ object BiliApi {
                     "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
                 val dynOid = runCatching {
+                    if (isOpus && opusId != null) return@runCatching opusId
                     desc?.optLong("dyn_id", 0L)?.takeIf { v -> v > 0L }
                         ?: desc?.optString("dyn_str", "")?.toLongOrNull()
                         ?: it.optLong("id", 0L).takeIf { v -> v > 0L }
                         ?: it.optString("id_str", "").toLongOrNull()
-                }.getOrNull()
+                }.getOrNull() ?: opusId
 
                 // 转发原动态摘要
                 var origAuthor: String? = null

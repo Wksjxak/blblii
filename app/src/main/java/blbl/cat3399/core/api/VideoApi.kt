@@ -247,9 +247,10 @@ internal object VideoApi {
             "pn" to safePn.toString(),
             "ps" to safePs.toString(),
             "nohot" to noHot.toString(),
+            "plat" to "1",
         )
         val keys = BiliClient.ensureWbiKeys()
-        val url = BiliClient.signedWbiUrlAbsolute("https://api.bilibili.com/x/v2/reply/wbi/main", params, keys)
+        val url = BiliClient.signedWbiUrlAbsolute("https://api.bilibili.com/x/v2/reply", params, keys)
         val json = BiliClient.getJson(url)
         val code = json.optInt("code", 0)
         if (code != 0) {
