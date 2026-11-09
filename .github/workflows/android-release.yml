@@ -101,8 +101,11 @@ jobs:
           RELEASE_TAG: ${{ startsWith(inputs.version_name, 'v') && inputs.version_name || format('v{0}', inputs.version_name) }}
           CHANGELOG: ${{ inputs.changelog }}
         run: |
-          # 带上 Build 标记（= versionCode）：同版本号重新出包时，客户端靠它判断是不是更新的一包
-          printf '%s\n\nBuild: %s\n' "${CHANGELOG:-}" "${GITHUB_RUN_NUMBER}" > changelog.md
+          # 带上 Build 标记（= 实际打进 APK 的 versionCode = 100000 + run_number）：
+          # 同版本号重新出包时，客户端靠它判断是不是更新的一包。
+          # 注意必须和上面 assembleRelease 用的 -PversionCode 完全一致，漏了 100000 偏移会导致永远判定不出更新。
+          BUILD_NUMBER=$((100000 + GITHUB_RUN_NUMBER))
+          printf '%s\n\nBuild: %s\n' "${CHANGELOG:-}" "${BUILD_NUMBER}" > changelog.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --notes-file changelog.md
           else

@@ -93,17 +93,13 @@ jobs:
         run: |
           PRERELEASE_FLAG=""
           if [[ "$RELEASE_TAG" == test-* ]]; then PRERELEASE_FLAG="--prerelease"; fi
+          # 带上 Build 标记（= 实际打进 APK 的 versionCode = 100000 + run_number），
+          # 让测试通道同版本号重发时客户端也能识别出新包。
+          BUILD_NUMBER=$((100000 + GITHUB_RUN_NUMBER))
+          printf '%s\n\nBuild: %s\n' "${CHANGELOG:-}" "${BUILD_NUMBER}" > changelog.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [ -n "${CHANGELOG:-}" ]; then
-              printf '%s' "$CHANGELOG" > changelog.md
-              gh release edit "$RELEASE_TAG" --notes-file changelog.md
-            fi
+            gh release edit "$RELEASE_TAG" --notes-file changelog.md
           else
-            if [ -n "${CHANGELOG:-}" ]; then
-              printf '%s' "$CHANGELOG" > changelog.md
-              gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
-            else
-              gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --generate-notes --target "$GITHUB_SHA"
-            fi
+            gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
           fi
           gh release upload "$RELEASE_TAG" "app/build/outputs/apk/debug/app-debug.apk#blbl-android-${VERSION_NAME}-debug.apk" --clobber
