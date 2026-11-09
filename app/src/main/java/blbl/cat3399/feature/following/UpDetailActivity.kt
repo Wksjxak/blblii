@@ -1757,7 +1757,7 @@ class UpDetailActivity : BaseActivity() {
                     upMidProvider = { mid },
                     imageViewer = null,
                     isActive = { true },
-                    commentType = blbl.cat3399.feature.video.comment.VIDEO_COMMENT_TYPE_DYNAMIC,
+                    commentType = item.commentType,
                 )
                 b.root
             },

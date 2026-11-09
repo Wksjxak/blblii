@@ -1825,6 +1825,7 @@ object BiliApi {
             val text = desc?.optString("text", "").orEmpty().trim()
             val images = ArrayList<String>()
             var title: String? = null
+            var isOpus = false
 
             major?.let { m ->
                 // 先从 major 自身取 title（很多类型通用），再补 opus 内部
@@ -1834,6 +1835,7 @@ object BiliApi {
                     .ifBlank { null }
                 val opus = m.optJSONObject("opus")
                 if (opus != null) {
+                    isOpus = true
                     if (title == null) {
                         title = opus.optString("title", "").trim().ifBlank {
                             opus.optJSONObject("display")?.optString("title", "")?.trim().orEmpty()
@@ -1909,6 +1911,7 @@ object BiliApi {
                     DynamicFeedItem.Rich(
                         dynId = rawId,
                         dynOid = dynOid,
+                        commentType = if (isOpus) 12 else 17,
                         text = text,
                         title = title,
                         images = images.take(3),
