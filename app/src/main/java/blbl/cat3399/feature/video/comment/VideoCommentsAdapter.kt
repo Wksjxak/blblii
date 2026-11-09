@@ -2,6 +2,7 @@ package blbl.cat3399.feature.video.comment
 
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -9,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.emote.EmoteSpannable
@@ -90,6 +92,12 @@ internal class VideoCommentsAdapter(
                         .takeIf { it != RecyclerView.NO_POSITION }
                         ?: position
                 notifyItemChanged(pos)
+                // After the item grows, make sure the expanded comment is scrolled into view.
+                holder.itemView.post {
+                    val rv = holder.itemView.parent as? RecyclerView ?: return@post
+                    (rv.layoutManager as? LinearLayoutManager)
+                        ?.scrollToPositionWithOffset(pos, 0)
+                }
             },
             onClick = onClick,
             onTouchClick = onTouchClick,
@@ -144,6 +152,9 @@ internal class VideoCommentsAdapter(
             binding.tvLike.text = if (hasLikes) Format.count(item.likeCount) else ""
             binding.tvLike.visibility = if (hasLikes) View.VISIBLE else View.GONE
             binding.tvMessage.maxLines = if (isExpanded) Int.MAX_VALUE else 6
+            // Explicitly toggle ellipsize so a recycled TextView doesn't keep a stale
+            // ellipsized layout after maxLines changes.
+            binding.tvMessage.ellipsize = if (isExpanded) null else TextUtils.TruncateAt.END
             val commentTextSize = BiliClient.prefs.commentTextSizeSp
             binding.tvMessage.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, commentTextSize)
             val blankFallback = if (item.pictures.isNotEmpty() || item.noteCvid > 0L) "" else "-"

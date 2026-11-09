@@ -371,6 +371,8 @@ internal class VideoCommentsPanelController(
     private fun openThread(rootRpid: Long) {
         val safeRoot = rootRpid.takeIf { it > 0L } ?: return
         threadState.open(safeRoot)
+        // Auto-expand the root comment inside the thread so the user reads the full text.
+        expandedRpids.add(safeRoot)
         views.comments.visibility = View.GONE
         views.thread.visibility = View.VISIBLE
         views.sortRow.visibility = View.GONE

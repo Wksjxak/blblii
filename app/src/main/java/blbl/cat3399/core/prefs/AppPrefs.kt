@@ -752,6 +752,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, false)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, value).apply()
 
+    /** UP 主动态 Tab 是否混入视频投稿动态（关闭后只显示图文/文字）。 */
+    var upDynamicShowVideo: Boolean
+        get() = prefs.getBoolean(KEY_UP_DYNAMIC_SHOW_VIDEO, true)
+        set(value) = prefs.edit().putBoolean(KEY_UP_DYNAMIC_SHOW_VIDEO, value).apply()
+
     var fullscreenEnabled: Boolean
         get() = prefs.getBoolean(KEY_FULLSCREEN, true)
         set(value) = prefs.edit().putBoolean(KEY_FULLSCREEN, value).apply()
@@ -1339,6 +1344,7 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_AUTO_SKIP_SERVER_BASE_URL = "player_auto_skip_server_base_url"
         private const val KEY_SPONSOR_BLOCK_PRIVATE_USER_ID = "sponsor_block_private_user_id"
         private const val KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY = "player_open_detail_before_play"
+        private const val KEY_UP_DYNAMIC_SHOW_VIDEO = "up_dynamic_show_video"
         private const val KEY_FULLSCREEN = "fullscreen_enabled"
         private const val KEY_AVOID_DISPLAY_CUTOUT = "avoid_display_cutout"
         private const val KEY_TAB_SWITCH_FOLLOWS_FOCUS = "tab_switch_follows_focus"

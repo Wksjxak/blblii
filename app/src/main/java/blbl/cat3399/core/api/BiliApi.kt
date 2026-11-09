@@ -7,6 +7,7 @@ import blbl.cat3399.core.model.BangumiSeason
 import blbl.cat3399.core.model.BangumiSeasonDetail
 import blbl.cat3399.core.model.Danmaku
 import blbl.cat3399.core.model.DanmakuUserFilter
+import blbl.cat3399.core.model.DynamicFeedItem
 import blbl.cat3399.core.model.FavFolder
 import blbl.cat3399.core.model.Following
 import blbl.cat3399.core.model.HistoryEntry
@@ -1653,8 +1654,14 @@ object BiliApi {
         val nextOffset: String?,
     )
 
+    /** UP 主动态 Tab：视频 + 图文混合。 */
+    data class UpDynamicPage(
+        val items: List<DynamicFeedItem>,
+        val nextOffset: String?,
+    )
+
     private data class DynamicFeedPage(
-        val cards: List<VideoCard>,
+        val cards: List<DynamicFeedItem>,
         val nextOffset: String?,
         val hasMore: Boolean,
         val rawItemCount: Int,
@@ -1678,14 +1685,14 @@ object BiliApi {
         return String(out)
     }
 
-    private fun parseDynamicVideoCards(items: JSONArray): List<VideoCard> {
-        val cards = ArrayList<VideoCard>()
+    private fun parseDynamicFeedItems(items: JSONArray): List<DynamicFeedItem> {
+        val cards = ArrayList<DynamicFeedItem>()
         for (i in 0 until items.length()) {
             val it = items.optJSONObject(i) ?: continue
             val trackId = it.optString("track_id", it.optString("trackid", "")).trim().takeIf { value -> value.isNotBlank() }
             val modules = it.optJSONObject("modules") ?: continue
             val moduleDynamic = modules.optJSONObject("module_dynamic") ?: continue
-            val major = moduleDynamic.optJSONObject("major") ?: continue
+            val major = moduleDynamic.optJSONObject("major")
 
             val author = modules.optJSONObject("module_author")
             val ownerName = author?.optString("name", "") ?: ""
@@ -1709,6 +1716,7 @@ object BiliApi {
                     )
                 val pubDate = archive.optLong("pubdate").takeIf { v -> v > 0 } ?: authorPubTs
                 cards.add(
+                    DynamicFeedItem.Video(
                     VideoCard(
                         bvid = bvid,
                         cid = null,
@@ -1725,6 +1733,7 @@ object BiliApi {
                         pubDateText = null,
                         isChargingArc = isChargingArc,
                         trackId = trackId,
+                    ),
                     ),
                 )
                 continue
@@ -1747,6 +1756,7 @@ object BiliApi {
                         badgeText = ugcSeason.optJSONObject("badge")?.optString("text", ""),
                     )
                 cards.add(
+                    DynamicFeedItem.Video(
                     VideoCard(
                         bvid = bvid,
                         cid = null,
@@ -1763,6 +1773,7 @@ object BiliApi {
                         pubDateText = null,
                         isChargingArc = isChargingArc,
                         trackId = trackId,
+                    ),
                     ),
                 )
                 continue
@@ -1785,6 +1796,7 @@ object BiliApi {
                         badgeText = additionalUgc.optString("head_text", ""),
                     )
                 cards.add(
+                    DynamicFeedItem.Video(
                     VideoCard(
                         bvid = bvid,
                         cid = null,
@@ -1801,6 +1813,50 @@ object BiliApi {
                         pubDateText = null,
                         isChargingArc = isChargingArc,
                         trackId = trackId,
+                    ),
+                    ),
+                )
+                continue
+            }
+
+            // ---- 图文 / 纯文字动态 ----
+            val desc = moduleDynamic.optJSONObject("desc")
+            val text = desc?.optString("text", "").orEmpty().trim()
+            val images = ArrayList<String>()
+
+            major?.let { m ->
+                val opus = m.optJSONObject("opus")
+                if (opus != null) {
+                    opus.optJSONArray("pics")?.let { arr ->
+                        for (k in 0 until arr.length()) {
+                            val u = arr.optJSONObject(k)?.optString("url", "")
+                            if (!u.isNullOrBlank()) images.add(u)
+                        }
+                    }
+                }
+                val draw = m.optJSONObject("draw")
+                if (draw != null) {
+                    draw.optJSONArray("items")?.let { arr ->
+                        for (k in 0 until arr.length()) {
+                            val u = arr.optJSONObject(k)?.optString("src", "")
+                            if (!u.isNullOrBlank()) images.add(u)
+                        }
+                    }
+                }
+            }
+
+            if (text.isNotBlank() || images.isNotEmpty()) {
+                val dynId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
+                    "rich_${ownerName}_${authorPubTs ?: 0}"
+                }
+                cards.add(
+                    DynamicFeedItem.Rich(
+                        dynId = dynId,
+                        text = text,
+                        images = images.take(3),
+                        authorName = ownerName,
+                        authorFace = ownerFace,
+                        pubTs = authorPubTs,
                     ),
                 )
             }
@@ -1821,7 +1877,8 @@ object BiliApi {
         val hasMore = data.optBoolean("has_more", false)
         val items = data.optJSONArray("items") ?: JSONArray()
         return withContext(Dispatchers.Default) {
-            val cards = parseDynamicVideoCards(items)
+            val cards = parseDynamicFeedItems(items).filterIsInstance<DynamicFeedItem.Video>()
+                .map { it.card }
             val next = data.optString("offset", "").takeIf { it.isNotBlank() }
             val nextOffset = if (hasMore) next else null
             AppLog.d(TAG, "dynamicAllVideo items=${items.length()} cards=${cards.size} hasMore=$hasMore nextOffset=${nextOffset?.take(8)}")
@@ -1893,7 +1950,7 @@ object BiliApi {
         val items = data.optJSONArray("items") ?: JSONArray()
         val hasMore = data.optBoolean("has_more", false)
         return withContext(Dispatchers.Default) {
-            val cards = parseDynamicVideoCards(items)
+            val cards = parseDynamicFeedItems(items)
             val next = data.optString("offset", "").takeIf { it.isNotBlank() }
             val nextOffset = if (hasMore) next else null
             DynamicFeedPage(
@@ -1910,9 +1967,9 @@ object BiliApi {
         offset: String? = null,
         minCardCount: Int = 0,
         maxPages: Int = 3,
-    ): DynamicPage {
+    ): UpDynamicPage {
         var currentOffset = offset
-        val cards = ArrayList<VideoCard>()
+        val cards = ArrayList<DynamicFeedItem>()
         var pages = 0
         var rawItems = 0
 
@@ -1942,7 +1999,7 @@ object BiliApi {
             TAG,
             "dynamicSpaceVideo hostMid=$hostMid pages=$pages rawItems=$rawItems cards=${cards.size} min=$minCardCount hasMore=$hasMore nextOffset=${nextOffset?.take(8)}",
         )
-        return DynamicPage(cards, nextOffset)
+        return UpDynamicPage(cards, nextOffset)
     }
 
     suspend fun spaceArcSearchPage(

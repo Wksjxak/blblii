@@ -20,6 +20,7 @@ import blbl.cat3399.core.api.BiliApiException
 import blbl.cat3399.core.api.video.VideoCollectionKind
 import blbl.cat3399.core.api.video.VideoCollectionSection
 import blbl.cat3399.core.log.AppLog
+import blbl.cat3399.core.model.DynamicFeedItem
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.tv.RemoteKeys
@@ -62,7 +63,7 @@ class UpDetailActivity : BaseActivity() {
     private lateinit var binding: ActivityUpDetailBinding
 
     private lateinit var archiveAdapter: VideoCardAdapter
-    private lateinit var dynamicAdapter: VideoCardAdapter
+    private lateinit var dynamicAdapter: UpDynamicAdapter
     private lateinit var sectionAdapter: UpDetailSectionAdapter
 
     private lateinit var archiveLayoutManager: GridLayoutManager
@@ -366,36 +367,18 @@ class UpDetailActivity : BaseActivity() {
                 actionDelegate = archiveActionController,
             )
 
-        val dynamicActionController =
-            VideoCardActionController(
-                context = this,
-                scope = lifecycleScope,
-                dismissBehavior = VideoCardDismissBehavior.LocalNotInterested,
-                onOpenDetail = { _, pos ->
-                    openVideoDetailFromPlaybackHandle(
-                        playbackHandle = dynamicPlaybackHandle(),
-                        position = pos,
-                    )
-                },
-                onOpenUp = { card -> openUpDetailForCard(card) },
-                onCardRemoved = { stableKey ->
-                    binding.recycler.removeVideoCardAndRestoreFocus(
-                        adapter = dynamicAdapter,
-                        stableKey = stableKey,
-                        isAlive = { !isFinishing && !isDestroyed && currentTab == UpTab.DYNAMIC },
-                    )
-                },
-            )
         dynamicAdapter =
-            VideoCardAdapter(
-                onClick = { _, pos ->
+            UpDynamicAdapter(
+                onVideoClick = { card ->
+                    val handle = dynamicPlaybackHandle()
+                    val videoCards = handle.snapshot().cards
+                    val pos = videoCards.indexOfFirst { it.bvid == card.bvid }.coerceAtLeast(0)
                     openVideoFromPlaybackHandle(
-                        playbackHandle = dynamicPlaybackHandle(),
+                        playbackHandle = handle,
                         position = pos,
                         openDetailBeforePlay = BiliClient.prefs.playerOpenDetailBeforePlay,
                     )
                 },
-                actionDelegate = dynamicActionController,
             )
 
         sectionAdapter =
@@ -715,6 +698,18 @@ class UpDetailActivity : BaseActivity() {
                 binding.recycler.adapter = dynamicAdapter
                 binding.recycler.layoutManager = archiveLayoutManager
                 archiveLayoutManager.spanCount = spanCountForWidth()
+                // 图文动态占满整行，视频卡片按网格排列。
+                archiveLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                    override fun getSpanSize(position: Int): Int {
+                        if (dynamicAdapter.itemCount == 0 || position !in 0 until dynamicAdapter.itemCount) {
+                            return 1
+                        }
+                        return when (dynamicAdapter.snapshot().getOrNull(position)) {
+                            is DynamicFeedItem.Rich -> archiveLayoutManager.spanCount
+                            else -> 1
+                        }
+                    }
+                }
 
                 binding.recycler.addOnScrollListener(
                     object : RecyclerView.OnScrollListener() {
@@ -1085,8 +1080,15 @@ class UpDetailActivity : BaseActivity() {
                 dynamicNextOffset = page.nextOffset
                 dynamicEndReached = page.nextOffset == null
 
-                val fresh = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedDynamicStableKeys)
-                fresh.forEach { loadedDynamicStableKeys.add(it.stableKey()) }
+                val showVideos = BiliClient.prefs.upDynamicShowVideo
+                val seen = HashSet<String>(loadedDynamicStableKeys)
+                val fresh = page.items.filter { item ->
+                    if (item is DynamicFeedItem.Video && !showVideos) return@filter false
+                    val key = item.stableKey
+                    if (!seen.add(key)) return@filter false
+                    true
+                }
+                fresh.forEach { loadedDynamicStableKeys.add(it.stableKey) }
                 if (isRefresh) dynamicAdapter.submit(fresh) else dynamicAdapter.append(fresh)
 
                 binding.recycler.post {
@@ -1608,13 +1610,15 @@ class UpDetailActivity : BaseActivity() {
     private fun dynamicPlaybackHandle() =
         buildPagedVideoCardPlaybackHandle<String?>(
             source = "UpDetail:$mid:dynamic",
-            cardsProvider = { dynamicAdapter.snapshot() },
+            cardsProvider = {
+                dynamicAdapter.snapshot().filterIsInstance<DynamicFeedItem.Video>().map { it.card }
+            },
             nextCursorProvider = { dynamicNextOffset },
             hasMoreProvider = { !dynamicEndReached },
         ) { cursor ->
             val page = BiliApi.dynamicSpaceVideo(hostMid = mid, offset = cursor, minCardCount = 0, maxPages = 1)
             VideoCardPlaylistPage(
-                cards = page.items,
+                cards = page.items.filterIsInstance<DynamicFeedItem.Video>().map { it.card },
                 nextCursor = page.nextOffset,
                 hasMore = page.nextOffset != null,
                 canAdvance = page.nextOffset != null && page.items.isNotEmpty(),

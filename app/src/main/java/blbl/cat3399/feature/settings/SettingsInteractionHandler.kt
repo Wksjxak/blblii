@@ -1489,6 +1489,12 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.UpDynamicShowVideo -> {
+                prefs.upDynamicShowVideo = !prefs.upDynamicShowVideo
+                AppToast.show(activity, "UP动态栏显示投稿视频：${if (prefs.upDynamicShowVideo) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.PlayerPlaybackMode -> {
                 val modeCodes = PlayerPlaybackModes.ordered
                 val options = modeCodes.map(PlayerPlaybackModes::label)
