@@ -24,6 +24,7 @@ sealed class DynamicFeedItem {
         val origTitle: String? = null,
         val origText: String? = null,
         val origCover: String? = null,
+        val paragraphs: List<DynamicParagraph> = emptyList(),
     ) : DynamicFeedItem() {
         override val stableKey: String get() = "rich:$dynId"
     }

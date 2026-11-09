@@ -8,6 +8,7 @@ import blbl.cat3399.core.model.BangumiSeasonDetail
 import blbl.cat3399.core.model.Danmaku
 import blbl.cat3399.core.model.DanmakuUserFilter
 import blbl.cat3399.core.model.DynamicFeedItem
+import blbl.cat3399.core.model.DynamicParagraph
 import blbl.cat3399.core.model.FavFolder
 import blbl.cat3399.core.model.Following
 import blbl.cat3399.core.model.HistoryEntry
@@ -1822,11 +1823,12 @@ object BiliApi {
 
             // ---- 图文 / 纯文字动态 ----
             val desc = moduleDynamic.optJSONObject("desc")
-            val text = desc?.optString("text", "").orEmpty().trim()
+            var text = desc?.optString("text", "").orEmpty().trim()
             val images = ArrayList<String>()
             var title: String? = null
             var isOpus = false
             var opusId: Long? = null
+            val paragraphs = ArrayList<DynamicParagraph>()
 
             major?.let { m ->
                 // 先从 major 自身取 title（很多类型通用），再补 opus 内部
@@ -1851,6 +1853,8 @@ object BiliApi {
                             if (!u.isNullOrBlank()) images.add(u)
                         }
                     }
+                    // 列表接口已带回完整 paragraphs（图文混排的顺序信息只在这里有）
+                    paragraphs.addAll(parseOpusParagraphs(opus.optJSONArray("paragraphs")))
                 }
                 val draw = m.optJSONObject("draw")
                 if (draw != null) {
@@ -1861,6 +1865,20 @@ object BiliApi {
                         }
                     }
                 }
+            }
+
+            // 卡片展示文本：paragraphs 存在时用其文字拼接（opus 的 desc.text 只是摘要）
+            if (paragraphs.isNotEmpty()) {
+                val joined = paragraphs.filterIsInstance<DynamicParagraph.Text>()
+                    .joinToString("\n") { p -> p.text }
+                    .trim()
+                if (joined.isNotBlank()) text = joined
+                AppLog.d(
+                    TAG,
+                    "opus paragraphs dyn=${it.optString("id_str", "")} total=${paragraphs.size} " +
+                        "text=${paragraphs.count { p -> p is DynamicParagraph.Text }} " +
+                        "img=${paragraphs.count { p -> p is DynamicParagraph.Image }}",
+                )
             }
 
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
@@ -1932,6 +1950,7 @@ object BiliApi {
                         origTitle = origTitle,
                         origText = origText,
                         origCover = origCover,
+                        paragraphs = paragraphs,
                     ),
                 )
             }
@@ -1940,6 +1959,79 @@ object BiliApi {
             }
         }
         return cards
+    }
+
+    /**
+     * 解析 opus.paragraphs：按原始顺序产出文字段/图片段/分割线。
+     * para 类型不靠猜，直接看哪个字段存在：
+     * text.nodes[] 文字、pics.pics[] 图片、line 分割线、list.items[] 列表。
+     */
+    private fun parseOpusParagraphs(arr: org.json.JSONArray?): List<DynamicParagraph> {
+        if (arr == null || arr.length() == 0) return emptyList()
+        val out = ArrayList<DynamicParagraph>()
+        for (p in 0 until arr.length()) {
+            val para = arr.optJSONObject(p) ?: continue
+
+            // 文字段 / 引用段
+            val nodes = para.optJSONObject("text")?.optJSONArray("nodes")
+            if (nodes != null && nodes.length() > 0) {
+                val sb = StringBuilder()
+                for (n in 0 until nodes.length()) {
+                    val node = nodes.optJSONObject(n) ?: continue
+                    when (node.optString("type", "")) {
+                        "TEXT_NODE_TYPE_WORD" -> {
+                            sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
+                        }
+                        "TEXT_NODE_TYPE_RICH" -> {
+                            sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
+                        }
+                    }
+                }
+                if (sb.isNotBlank()) out.add(DynamicParagraph.Text(sb.toString()))
+                continue
+            }
+
+            // 图片段
+            val pics = para.optJSONObject("pics")?.optJSONArray("pics")
+            if (pics != null && pics.length() > 0) {
+                for (pi in 0 until pics.length()) {
+                    val o = pics.optJSONObject(pi) ?: continue
+                    val u = o.optString("url", "").ifBlank { o.optString("src", "") }
+                    if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                }
+                continue
+            }
+
+            // 列表段：list.items[].text.nodes
+            val listItems = para.optJSONObject("list")?.optJSONArray("items")
+            if (listItems != null && listItems.length() > 0) {
+                for (li in 0 until listItems.length()) {
+                    val item = listItems.optJSONObject(li) ?: continue
+                    val liNodes = item.optJSONObject("text")?.optJSONArray("nodes") ?: continue
+                    val sb = StringBuilder()
+                    for (n in 0 until liNodes.length()) {
+                        val node = liNodes.optJSONObject(n) ?: continue
+                        when (node.optString("type", "")) {
+                            "TEXT_NODE_TYPE_WORD" -> {
+                                sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
+                            }
+                            "TEXT_NODE_TYPE_RICH" -> {
+                                sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
+                            }
+                        }
+                    }
+                    if (sb.isNotBlank()) out.add(DynamicParagraph.Text("· " + sb.toString()))
+                }
+                continue
+            }
+
+            // 分割线
+            if (para.optJSONObject("line") != null) {
+                out.add(DynamicParagraph.Separator)
+                continue
+            }
+        }
+        return out
     }
 
     suspend fun dynamicAllVideo(offset: String? = null): DynamicPage {
@@ -2081,7 +2173,7 @@ object BiliApi {
     }
 
     /** 动态详情：拉完整正文和全部图片。返回 (fullText, allImages) */
-    suspend fun dynamicDetail(dynId: String): List<blbl.cat3399.core.model.DynamicParagraph> {
+    suspend fun dynamicDetail(dynId: String): List<DynamicParagraph> {
         val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=$dynId&features=itemOpusStyle,opusBigCover"
         val json = BiliClient.getJson(url)
         val item = json.optJSONObject("data")?.optJSONObject("item")
@@ -2092,7 +2184,7 @@ object BiliApi {
         val major = moduleDynamic?.optJSONObject("major")
         val opus = major?.optJSONObject("opus")
 
-        val paragraphs = mutableListOf<blbl.cat3399.core.model.DynamicParagraph>()
+        val paragraphs = mutableListOf<DynamicParagraph>()
 
         // ---- 按段落顺序解析 opus 正文 ----
         val paraArr = opus?.optJSONArray("paragraphs")
@@ -2115,7 +2207,7 @@ object BiliApi {
                         }
                     }
                     if (sb.isNotBlank()) {
-                        paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Text(sb.toString()))
+                        paragraphs.add(DynamicParagraph.Text(sb.toString()))
                     }
                     continue
                 }
@@ -2125,14 +2217,14 @@ object BiliApi {
                     for (pi in 0 until picsArr.length()) {
                         val u = picsArr.optJSONObject(pi)?.optString("url", "")
                         if (!u.isNullOrBlank()) {
-                            paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                            paragraphs.add(DynamicParagraph.Image(u))
                         }
                     }
                     continue
                 }
                 // 分割线段：line
                 if (para.optJSONObject("line") != null) {
-                    paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Separator)
+                    paragraphs.add(DynamicParagraph.Separator)
                     continue
                 }
             }
@@ -2142,14 +2234,14 @@ object BiliApi {
         if (paragraphs.isEmpty()) {
             val descText = desc?.optString("text", "").orEmpty()
             if (descText.isNotBlank()) {
-                paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Text(descText))
+                paragraphs.add(DynamicParagraph.Text(descText))
             }
             // draw 类型动态
             major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
                 for (k in 0 until arr.length()) {
                     val u = arr.optJSONObject(k)?.optString("src", "")
                     if (!u.isNullOrBlank()) {
-                        paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                        paragraphs.add(DynamicParagraph.Image(u))
                     }
                 }
             }
@@ -2159,7 +2251,7 @@ object BiliApi {
                     for (k in 0 until arr.length()) {
                         val u = arr.optJSONObject(k)?.optString("url", "")
                         if (!u.isNullOrBlank()) {
-                            paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                            paragraphs.add(DynamicParagraph.Image(u))
                         }
                     }
                 }

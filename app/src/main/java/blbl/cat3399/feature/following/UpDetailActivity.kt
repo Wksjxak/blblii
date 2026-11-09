@@ -22,6 +22,7 @@ import blbl.cat3399.core.api.video.VideoCollectionKind
 import blbl.cat3399.core.api.video.VideoCollectionSection
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.DynamicFeedItem
+import blbl.cat3399.core.model.DynamicParagraph
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.tv.RemoteKeys
@@ -1721,7 +1722,7 @@ class UpDetailActivity : BaseActivity() {
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
         )
 
-        fun renderParagraphs(title: String?, paragraphs: List<blbl.cat3399.core.model.DynamicParagraph>) {
+        fun renderParagraphs(title: String?, paragraphs: List<DynamicParagraph>) {
             container.removeAllViews()
             if (!title.isNullOrBlank()) {
                 android.widget.TextView(this).apply {
@@ -1735,7 +1736,7 @@ class UpDetailActivity : BaseActivity() {
             }
             paragraphs.forEach { para ->
                 when (para) {
-                    is blbl.cat3399.core.model.DynamicParagraph.Text -> {
+                    is DynamicParagraph.Text -> {
                         android.widget.TextView(this).apply {
                             this.text = para.text
                             setTextColor(android.graphics.Color.WHITE)
@@ -1745,7 +1746,7 @@ class UpDetailActivity : BaseActivity() {
                             container.addView(this, fullWidthLp)
                         }
                     }
-                    is blbl.cat3399.core.model.DynamicParagraph.Image -> {
+                    is DynamicParagraph.Image -> {
                         android.widget.ImageView(this).apply {
                             val lp = android.widget.LinearLayout.LayoutParams(
                                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1760,7 +1761,7 @@ class UpDetailActivity : BaseActivity() {
                             container.addView(this, lp)
                         }
                     }
-                    blbl.cat3399.core.model.DynamicParagraph.Separator -> {
+                    DynamicParagraph.Separator -> {
                         android.view.View(this).apply {
                             val lp = android.widget.LinearLayout.LayoutParams(
                                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1776,14 +1777,16 @@ class UpDetailActivity : BaseActivity() {
             }
         }
 
-        // 先渲染列表里已有的内容（文字+图片作为初始段落）
-        val initialParas = mutableListOf<blbl.cat3399.core.model.DynamicParagraph>()
-        if (item.text.isNotBlank()) {
-            initialParas.add(blbl.cat3399.core.model.DynamicParagraph.Text(item.text))
-        }
-        item.images.forEach { url ->
-            initialParas.add(blbl.cat3399.core.model.DynamicParagraph.Image(url))
-        }
+        // 列表接口已经带回完整段落，直接用，不再等二次请求
+        val initialParas =
+            if (item.paragraphs.isNotEmpty()) {
+                item.paragraphs
+            } else {
+                buildList {
+                    if (item.text.isNotBlank()) add(DynamicParagraph.Text(item.text))
+                    item.images.forEach { add(DynamicParagraph.Image(it)) }
+                }
+            }
         renderParagraphs(item.title, initialParas)
 
         val scroll = android.widget.ScrollView(this).apply {
@@ -1797,13 +1800,17 @@ class UpDetailActivity : BaseActivity() {
         }
         scroll.addView(outer)
 
-        // 异步拉完整详情（按段落顺序的图文混排）
-        lifecycleScope.launch {
-            runCatching {
-                BiliApi.dynamicDetail(item.dynId)
-            }.onSuccess { paras ->
-                if (paras.isNotEmpty()) {
-                    runOnUiThread { renderParagraphs(item.title, paras) }
+        // 只有在本地段落缺失时才回落请求详情接口；失败要留痕，不能静默
+        if (initialParas.isEmpty()) {
+            lifecycleScope.launch {
+                runCatching {
+                    BiliApi.dynamicDetail(item.dynId)
+                }.onSuccess { paras ->
+                    if (paras.isNotEmpty()) {
+                        runOnUiThread { renderParagraphs(item.title, paras) }
+                    }
+                }.onFailure { t ->
+                    AppLog.w("UpDetail", "dynamicDetail failed dynId=${item.dynId}: ${t.message}")
                 }
             }
         }
