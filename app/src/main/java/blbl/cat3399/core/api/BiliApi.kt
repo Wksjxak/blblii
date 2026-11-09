@@ -1903,8 +1903,12 @@ object BiliApi {
                 var origTitle: String? = null
                 var origText: String? = null
                 var origCover: String? = null
+                var origDynId: String? = null
                 val orig = moduleDynamic.optJSONObject("orig")
                 if (orig != null) {
+                    origDynId = orig.optString("id_str", "").trim().ifBlank { null }
+                        ?: orig.optJSONObject("basic")?.optString("id_str", "")?.trim()?.ifBlank { null }
+                        ?: orig.optString("id", "").trim().ifBlank { null }
                     val origModules = orig.optJSONObject("modules")
                     origModules?.optJSONObject("module_author")?.let {
                         origAuthor = it.optString("name", "").trim().ifBlank { null }
@@ -1950,6 +1954,7 @@ object BiliApi {
                         origTitle = origTitle,
                         origText = origText,
                         origCover = origCover,
+                        origDynId = origDynId,
                         paragraphs = paragraphs,
                     ),
                 )

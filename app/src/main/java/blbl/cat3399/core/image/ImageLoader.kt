@@ -29,8 +29,17 @@ object ImageLoader {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
-    fun loadInto(view: ImageView, url: String?) {
+    fun loadInto(view: ImageView, url: String?, allowAnimated: Boolean = false) {
         val normalized = normalizeImageUrl(url)
+
+        // 动图不主动加载：只留占位，不发起请求，避免自动下载一屏 GIF
+        if (!allowAnimated && normalized != null && isAnimatedUrl(normalized)) {
+            view.setTag(R.id.tag_image_loader_url, null)
+            inFlight.remove(view)?.cancel()
+            if (view.drawable !== placeholder) view.setImageDrawable(placeholder)
+            AppLog.d(TAG, "skip animated url=$normalized")
+            return
+        }
 
         if (normalized == null) {
             view.setTag(R.id.tag_image_loader_url, null)
@@ -100,6 +109,13 @@ object ImageLoader {
         while (longerSide / (sampleSize * 2) >= maxSide) sampleSize *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
+
+    /** 动图判定：B 站动图 CDN 路径以 .gif 结尾，偶尔带 @ 缩放后缀 */
+    fun isAnimatedUrl(url: String): Boolean {
+        val path = url.toHttpUrlOrNull()?.encodedPath?.lowercase() ?: return false
+        val noQuery = path.substringBefore('@')
+        return noQuery.endsWith(".gif")
     }
 
     private fun normalizeImageUrl(url: String?): String? {

@@ -1636,7 +1636,8 @@ class UpDetailActivity : BaseActivity() {
 
         val iv = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
+            // 全屏查看是用户主动点开，允许加载动图（仍只显示首帧）
+            blbl.cat3399.core.image.ImageLoader.loadInto(this, url, allowAnimated = true)
         }
         container.addView(
             iv,
@@ -1739,8 +1740,13 @@ class UpDetailActivity : BaseActivity() {
                     is DynamicParagraph.Text -> {
                         android.widget.TextView(this).apply {
                             this.text = para.text
-                            setTextColor(android.graphics.Color.WHITE)
-                            textSize = BiliClient.prefs.dynamicDetailTextSize
+                            setTextColor(if (para.isHeading) 0xFF9FD6FF.toInt() else android.graphics.Color.WHITE)
+                            textSize = if (para.isHeading) {
+                                BiliClient.prefs.dynamicDetailTextSize + 2f
+                            } else {
+                                BiliClient.prefs.dynamicDetailTextSize
+                            }
+                            if (para.isHeading) setTypeface(typeface, android.graphics.Typeface.BOLD)
                             setLineSpacing(0f, 1.3f)
                             setPadding(0, padV / 4, 0, padV / 4)
                             container.addView(this, fullWidthLp)
@@ -1788,7 +1794,11 @@ class UpDetailActivity : BaseActivity() {
                 }
             }
         renderParagraphs(item.title, initialParas)
-        AppLog.d("UpDetail", "openDynamicDetail dyn=${item.dynId} initial=${initialParas.size}")
+        AppLog.d(
+            "UpDetail",
+            "openDynamicDetail dyn=${item.dynId} initial=${initialParas.size} " +
+                "forward=${item.isForward} origDyn=${item.origDynId ?: "-"}",
+        )
 
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -1801,16 +1811,67 @@ class UpDetailActivity : BaseActivity() {
         }
         scroll.addView(outer)
 
+        // 转发动态：正文 = 转发者内容 + [转发自] + 原动态正文
+        var bodyParas: List<DynamicParagraph> = initialParas
+        var origParas: List<DynamicParagraph> = emptyList()
+
+        fun forwardBlock(includeSummary: Boolean): List<DynamicParagraph> {
+            if (!item.isForward) return emptyList()
+            val out = ArrayList<DynamicParagraph>()
+            out.add(DynamicParagraph.Separator)
+            val head = StringBuilder("转发自 ")
+            if (!item.origAuthor.isNullOrBlank()) head.append("@").append(item.origAuthor)
+            out.add(DynamicParagraph.Text(head.toString().trim(), isHeading = true))
+            if (includeSummary) {
+                val ot = item.origTitle
+                val ox = item.origText
+                val oc = item.origCover
+                if (!ot.isNullOrBlank()) out.add(DynamicParagraph.Text(ot, isHeading = true))
+                if (!ox.isNullOrBlank()) out.add(DynamicParagraph.Text(ox))
+                if (!oc.isNullOrBlank()) out.add(DynamicParagraph.Image(oc))
+            }
+            return out
+        }
+
+        fun rerender() {
+            renderParagraphs(
+                item.title,
+                bodyParas + forwardBlock(includeSummary = origParas.isEmpty()) + origParas,
+            )
+        }
+
+        // 先用列表已有的转发摘要立刻渲染一次，原动态正文到了再补充
+        if (item.isForward) rerender()
+
         lifecycleScope.launch {
             runCatching {
                 BiliApi.dynamicDetail(item.dynId)
             }.onSuccess { paras ->
                 AppLog.d("UpDetail", "dynamicDetail ok dyn=${item.dynId} paras=${paras.size}")
-                if (paras.isNotEmpty() && container.isAttachedToWindow) {
-                    runOnUiThread { renderParagraphs(item.title, paras) }
+                if (paras.isNotEmpty()) {
+                    bodyParas = paras
+                    if (container.isAttachedToWindow) runOnUiThread { rerender() }
                 }
             }.onFailure { t ->
                 AppLog.w("UpDetail", "dynamicDetail failed dyn=${item.dynId}: ${t.message}")
+            }
+        }
+
+        // 转发：再拉一次原动态，拿到完整图文正文
+        val origDynId = item.origDynId
+        if (item.isForward && !origDynId.isNullOrBlank()) {
+            lifecycleScope.launch {
+                runCatching {
+                    BiliApi.dynamicDetail(origDynId)
+                }.onSuccess { paras ->
+                    AppLog.d("UpDetail", "origDetail ok dyn=$origDynId paras=${paras.size}")
+                    if (paras.isNotEmpty()) {
+                        origParas = paras
+                        if (container.isAttachedToWindow) runOnUiThread { rerender() }
+                    }
+                }.onFailure { t ->
+                    AppLog.w("UpDetail", "origDetail failed dyn=$origDynId: ${t.message}")
+                }
             }
         }
 

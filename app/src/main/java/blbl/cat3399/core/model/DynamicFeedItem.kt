@@ -24,9 +24,16 @@ sealed class DynamicFeedItem {
         val origTitle: String? = null,
         val origText: String? = null,
         val origCover: String? = null,
+        /** 被转发原动态的 id，用于拉取其完整图文正文 */
+        val origDynId: String? = null,
         val paragraphs: List<DynamicParagraph> = emptyList(),
     ) : DynamicFeedItem() {
         override val stableKey: String get() = "rich:$dynId"
+
+        /** 是否为转发动态（带原动态信息） */
+        val isForward: Boolean
+            get() = !origAuthor.isNullOrBlank() || !origTitle.isNullOrBlank() ||
+                !origText.isNullOrBlank() || !origCover.isNullOrBlank()
     }
 }
 
