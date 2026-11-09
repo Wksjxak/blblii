@@ -2224,9 +2224,26 @@ object BiliApi {
                     linkedMapOf("id" to dynId, "features" to features),
                 ),
             )
-        val item = json.optJSONObject("data")?.optJSONObject("item") ?: return emptyList()
+        val code = json.optInt("code", -1)
+        val item = json.optJSONObject("data")?.optJSONObject("item")
+        if (item == null) {
+            AppLog.w(
+                TAG,
+                "detailFallback dyn=$dynId code=$code msg=${json.optString("message", "")} item=null",
+            )
+            return emptyList()
+        }
         val paras = extractParagraphsFromItem(item)
-        AppLog.d(TAG, "detailFallback dyn=$dynId code=${json.optInt("code", -1)} paras=${paras.size}")
+        AppLog.d(TAG, "detailFallback dyn=$dynId code=$code paras=${paras.size}")
+        if (paras.isEmpty()) {
+            // 老动态（非 opus / 已删除 / 纯转发）正文提不出来时，把 modules 形态打出来定位
+            val mods = item.opt("modules")
+            AppLog.w(
+                TAG,
+                "detailEmptyBody dyn=$dynId itemKeys=${item.keys().asSequence().joinToString(",")} " +
+                    "modulesType=${if (mods is JSONArray) "array" else if (mods is JSONObject) "object" else "none"}",
+            )
+        }
         return paras
     }
 
