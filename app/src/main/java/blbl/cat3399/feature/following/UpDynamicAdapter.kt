@@ -148,7 +148,6 @@ class UpDynamicAdapter(
                 if (url != null) {
                     iv.visibility = View.VISIBLE
                     iv.isClickable = true
-                    iv.isFocusable = true
                     ImageLoader.loadInto(iv, url)
                     iv.setOnClickListener { onImageClick(item, idx) }
                 } else {

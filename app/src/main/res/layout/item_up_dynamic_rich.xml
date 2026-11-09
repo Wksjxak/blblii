@@ -7,7 +7,6 @@
     android:layout_margin="6dp"
     android:clickable="true"
     android:focusable="true"
-    android:descendantFocusability="afterDescendants"
     android:stateListAnimator="@animator/blbl_focus_scale"
     app:cardBackgroundColor="@android:color/black"
     app:cardCornerRadius="10dp"
@@ -68,7 +67,6 @@
                 android:layout_width="140dp"
                 android:layout_height="100dp"
                 android:clickable="true"
-                android:focusable="true"
                 android:scaleType="centerCrop"
                 android:contentDescription="@string/app_name" />
 
@@ -78,7 +76,6 @@
                 android:layout_height="100dp"
                 android:layout_marginStart="8dp"
                 android:clickable="true"
-                android:focusable="true"
                 android:scaleType="centerCrop"
                 android:contentDescription="@string/app_name" />
 
@@ -88,7 +85,6 @@
                 android:layout_height="100dp"
                 android:layout_marginStart="8dp"
                 android:clickable="true"
-                android:focusable="true"
                 android:scaleType="centerCrop"
                 android:contentDescription="@string/app_name" />
         </LinearLayout>

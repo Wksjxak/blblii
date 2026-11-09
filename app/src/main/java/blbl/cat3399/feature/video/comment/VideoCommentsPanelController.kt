@@ -196,17 +196,30 @@ internal class VideoCommentsPanelController(
             )
         views.comments.adapter = commentsAdapter
         views.comments.layoutManager = LinearLayoutManager(context)
-        // TV: 焦点变化时自动滚动到中间，避免评论被裁
-        views.comments.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) {
-                val focused = views.comments.focusedChild ?: return@setOnFocusChangeListener
-                views.comments.post {
-                    val lm = views.comments.layoutManager as? LinearLayoutManager ?: return@post
-                    val pos = lm.getPosition(focused)
-                    if (pos >= 0) views.comments.smoothScrollToPosition(pos)
+        // TV: 评论卡片获得焦点时滚动到中间位置
+        fun RecyclerView.centerChildOnFocus() {
+            addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
+                override fun onChildViewAttachedToWindow(view: android.view.View) {
+                    view.onFocusChangeListener = android.view.View.OnFocusChangeListener { _, hasFocus ->
+                        if (hasFocus) {
+                            post {
+                                val rv = this@centerChildOnFocus
+                                val rvCenter = rv.height / 2
+                                val childCenter = view.top + view.height / 2
+                                val dy = childCenter - rvCenter
+                                if (kotlin.math.abs(dy) > rv.height / 4) {
+                                    rv.smoothScrollBy(0, dy)
+                                }
+                            }
+                        }
+                    }
                 }
-            }
+                override fun onChildViewDetachedFromWindow(view: android.view.View) {
+                    view.onFocusChangeListener = null
+                }
+            })
         }
+        views.comments.centerChildOnFocus()
         views.comments.clearOnScrollListeners()
         views.comments.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
@@ -233,6 +246,7 @@ internal class VideoCommentsPanelController(
             )
         views.thread.adapter = threadAdapter
         views.thread.layoutManager = LinearLayoutManager(context)
+        views.thread.centerChildOnFocus()
         views.thread.clearOnScrollListeners()
         views.thread.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
