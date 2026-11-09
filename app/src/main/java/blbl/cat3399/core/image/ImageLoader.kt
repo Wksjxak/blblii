@@ -2,7 +2,13 @@ package blbl.cat3399.core.image
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.widget.ImageView
 import androidx.collection.LruCache
 import blbl.cat3399.R
@@ -22,6 +28,7 @@ object ImageLoader {
     private const val SMALL_BUCKET_MAX = 480
     private const val LARGE_BUCKET_MAX = 1280
     private val placeholder = ColorDrawable(0xFF2A2A2A.toInt())
+    private var animatedPlaceholder: Drawable? = null
     private val inFlight = WeakHashMap<ImageView, Job>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -36,7 +43,7 @@ object ImageLoader {
         if (!allowAnimated && normalized != null && isAnimatedUrl(normalized)) {
             view.setTag(R.id.tag_image_loader_url, null)
             inFlight.remove(view)?.cancel()
-            if (view.drawable !== placeholder) view.setImageDrawable(placeholder)
+            view.setImageDrawable(animatedPlaceholderFor(view.context))
             AppLog.d(TAG, "skip animated url=$normalized")
             return
         }
@@ -109,6 +116,59 @@ object ImageLoader {
         while (longerSide / (sampleSize * 2) >= maxSide) sampleSize *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
+
+    /** 动图占位：一眼能看出这是动图被暂停加载，而不是加载失败 */
+    private fun animatedPlaceholderFor(context: android.content.Context): Drawable =
+        animatedPlaceholder ?: AnimatedPlaceholderDrawable(context.applicationContext)
+            .also { animatedPlaceholder = it }
+
+    private class AnimatedPlaceholderDrawable(context: android.content.Context) : Drawable() {
+        private val density = context.resources.displayMetrics.density
+        private val bgPaint = Paint().apply { color = 0xFF2A2A2A.toInt() }
+        private val iconPaint = Paint().apply {
+            color = 0xFF8A8A8A.toInt()
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+        private val textPaint = Paint().apply {
+            color = 0xFFBDBDBD.toInt()
+            textSize = 13f * density
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+
+        override fun draw(canvas: Canvas) {
+            val b = bounds
+            canvas.drawRect(b, bgPaint)
+            val cx = b.centerX().toFloat()
+            val cy = b.centerY().toFloat() - 12f * density
+            val r = 9f * density
+            val tri = Path().apply {
+                moveTo(cx - r * 0.55f, cy - r)
+                lineTo(cx + r, cy)
+                lineTo(cx - r * 0.55f, cy + r)
+                close()
+            }
+            canvas.drawPath(tri, iconPaint)
+            canvas.drawText("动图 · 已暂停加载", cx, cy + 28f * density, textPaint)
+            canvas.drawText("确认键放大后加载", cx, cy + 46f * density, textPaint)
+        }
+
+        override fun setAlpha(alpha: Int) {
+            bgPaint.alpha = alpha
+            iconPaint.alpha = alpha
+            textPaint.alpha = alpha
+        }
+
+        override fun setColorFilter(colorFilter: ColorFilter?) {
+            bgPaint.colorFilter = colorFilter
+            iconPaint.colorFilter = colorFilter
+            textPaint.colorFilter = colorFilter
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity(): Int = PixelFormat.OPAQUE
     }
 
     /** 动图判定：B 站动图 CDN 路径以 .gif 结尾，偶尔带 @ 缩放后缀 */

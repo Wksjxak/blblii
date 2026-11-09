@@ -1709,6 +1709,16 @@ class UpDetailActivity : BaseActivity() {
         container.requestFocus()
     }
 
+    /** 正文段落的焦点态背景：TV 上必须能看出当前滚到哪一段 */
+    private fun paragraphFocusBg(): android.graphics.drawable.Drawable =
+        android.graphics.drawable.StateListDrawable().apply {
+            addState(
+                intArrayOf(android.R.attr.state_focused),
+                android.graphics.drawable.ColorDrawable(0x1FFFFFFF),
+            )
+            addState(intArrayOf(), null)
+        }
+
     private fun openDynamicDetail(item: DynamicFeedItem.Rich) {
         val density = resources.displayMetrics.density
         val padH = (20 * density).toInt()
@@ -1748,7 +1758,11 @@ class UpDetailActivity : BaseActivity() {
                             }
                             if (para.isHeading) setTypeface(typeface, android.graphics.Typeface.BOLD)
                             setLineSpacing(0f, 1.3f)
-                            setPadding(0, padV / 4, 0, padV / 4)
+                            setPadding(padV / 3, padV / 4, padV / 3, padV / 4)
+                            // TV：每段都是一个焦点落点，焦点走到哪正文就滚到哪
+                            isFocusable = true
+                            isFocusableInTouchMode = false
+                            background = paragraphFocusBg()
                             container.addView(this, fullWidthLp)
                         }
                     }
@@ -1762,6 +1776,7 @@ class UpDetailActivity : BaseActivity() {
                             scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                             isFocusable = true
                             isClickable = true
+                            background = paragraphFocusBg()
                             blbl.cat3399.core.image.ImageLoader.loadInto(this, para.url)
                             setOnClickListener { showFullImage(para.url, triggerView = this) }
                             container.addView(this, lp)
@@ -1802,6 +1817,20 @@ class UpDetailActivity : BaseActivity() {
 
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
+            // TV：正文本体必须能持焦，否则 D-pad 上下没有落点，正文滚不动
+            isFocusable = true
+            isFocusableInTouchMode = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
+            // 鼠标滚轮：自己消费掉，避免滚动事件穿透到弹窗后面的动态列表
+            setOnGenericMotionListener { v, ev ->
+                if (ev.actionMasked == android.view.MotionEvent.ACTION_SCROLL) {
+                    val dy = ev.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL)
+                    if (dy != 0f) v.scrollBy(0, (-dy * v.height / 3f).toInt())
+                    true
+                } else {
+                    false
+                }
+            }
         }
         val outer = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
@@ -1887,6 +1916,10 @@ class UpDetailActivity : BaseActivity() {
                 maxWidthDp = 1120f,
                 maxHeightRatio = 0.85f,
             ),
+            onModalAttached = {
+                // 焦点先落在正文容器上，D-pad 上下才有落点
+                if (!container.hasFocus()) scroll.requestFocus()
+            },
             content = { scroll },
         )
     }
