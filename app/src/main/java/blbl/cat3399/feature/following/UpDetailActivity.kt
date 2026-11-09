@@ -391,6 +391,9 @@ class UpDetailActivity : BaseActivity() {
                 onRichLongClick = { item ->
                     openDynamicComments(item)
                 },
+                onRichImageClick = { item, idx ->
+                    item.images.getOrNull(idx)?.let { showFullImage(it) }
+                },
             )
 
         sectionAdapter =
@@ -1661,7 +1664,7 @@ class UpDetailActivity : BaseActivity() {
                 android.widget.TextView(this).apply {
                     this.text = text
                     setTextColor(android.graphics.Color.WHITE)
-                    textSize = 20f
+                    textSize = BiliClient.prefs.dynamicDetailTextSize
                     setLineSpacing(0f, 1.3f)
                     container.addView(this)
                 }

@@ -22,6 +22,7 @@ class UpDynamicAdapter(
     private val onVideoClick: (VideoCard) -> Unit,
     private val onRichClick: (DynamicFeedItem.Rich) -> Unit,
     private val onRichLongClick: (DynamicFeedItem.Rich) -> Unit,
+    private val onRichImageClick: (DynamicFeedItem.Rich, Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = ArrayList<DynamicFeedItem>()
@@ -61,7 +62,7 @@ class UpDynamicAdapter(
                 ItemVideoCardBinding.inflate(inflater, parent, false),
                 onVideoClick,
             )
-            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick, onRichLongClick)
+            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick, onRichLongClick, onRichImageClick)
         }
     }
 
@@ -116,6 +117,7 @@ class UpDynamicAdapter(
         private val binding: ItemUpDynamicRichBinding,
         private val onClick: (DynamicFeedItem.Rich) -> Unit,
         private val onLongClick: (DynamicFeedItem.Rich) -> Unit,
+        private val onImageClick: (DynamicFeedItem.Rich, Int) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: DynamicFeedItem.Rich) {
             binding.tvRichTime.text = item.pubTs?.let { Format.pubDateText(it) }.orEmpty()
@@ -145,7 +147,10 @@ class UpDynamicAdapter(
                 val url = item.images.getOrNull(idx)
                 if (url != null) {
                     iv.visibility = View.VISIBLE
+                    iv.isClickable = true
+                    iv.isFocusable = true
                     ImageLoader.loadInto(iv, url)
+                    iv.setOnClickListener { onImageClick(item, idx) }
                 } else {
                     iv.visibility = View.GONE
                 }

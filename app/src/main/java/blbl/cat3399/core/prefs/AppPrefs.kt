@@ -757,6 +757,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_UP_DYNAMIC_SHOW_VIDEO, true)
         set(value) = prefs.edit().putBoolean(KEY_UP_DYNAMIC_SHOW_VIDEO, value).apply()
 
+    /** 动态详情正文字号（sp），默认 20。 */
+    var dynamicDetailTextSize: Float
+        get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f)
+        set(value) = prefs.edit().putFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, value).apply()
+
     var fullscreenEnabled: Boolean
         get() = prefs.getBoolean(KEY_FULLSCREEN, true)
         set(value) = prefs.edit().putBoolean(KEY_FULLSCREEN, value).apply()
@@ -1345,6 +1350,7 @@ class AppPrefs(context: Context) {
         private const val KEY_SPONSOR_BLOCK_PRIVATE_USER_ID = "sponsor_block_private_user_id"
         private const val KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY = "player_open_detail_before_play"
         private const val KEY_UP_DYNAMIC_SHOW_VIDEO = "up_dynamic_show_video"
+        private const val KEY_DYNAMIC_DETAIL_TEXT_SIZE = "dynamic_detail_text_size"
         private const val KEY_FULLSCREEN = "fullscreen_enabled"
         private const val KEY_AVOID_DISPLAY_CUTOUT = "avoid_display_cutout"
         private const val KEY_TAB_SWITCH_FOLLOWS_FOCUS = "tab_switch_follows_focus"
