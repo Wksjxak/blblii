@@ -2087,12 +2087,16 @@ object BiliApi {
         val item = json.optJSONObject("data")?.optJSONObject("item")
             ?: return "" to emptyList()
         val modules = item.optJSONObject("modules")
-        val desc = modules?.optJSONObject("module_dynamic")?.optJSONObject("desc")
-        val fullText = desc?.optString("text", "") ?: ""
+        val moduleDynamic = modules?.optJSONObject("module_dynamic")
+        val desc = moduleDynamic?.optJSONObject("desc")
+        val major = moduleDynamic?.optJSONObject("major")
+
         val images = mutableListOf<String>()
-        val major = modules?.optJSONObject("module_dynamic")?.optJSONObject("major")
+        val fullText = StringBuilder()
+
         // opus 全部图片
-        major?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
+        val opus = major?.optJSONObject("opus")
+        opus?.optJSONArray("pics")?.let { arr ->
             for (k in 0 until arr.length()) {
                 val u = arr.optJSONObject(k)?.optString("url", "")
                 if (!u.isNullOrBlank()) images.add(u)
@@ -2105,7 +2109,46 @@ object BiliApi {
                 if (!u.isNullOrBlank()) images.add(u)
             }
         }
-        return fullText to images
+
+        // opus 正文：从 paragraphs[].text.nodes[] 提取
+        val paragraphs = opus?.optJSONArray("paragraphs")
+        if (paragraphs != null && paragraphs.length() > 0) {
+            for (p in 0 until paragraphs.length()) {
+                val para = paragraphs.optJSONObject(p) ?: continue
+                val nodes = para.optJSONObject("text")?.optJSONArray("nodes") ?: continue
+                val paraText = StringBuilder()
+                for (n in 0 until nodes.length()) {
+                    val node = nodes.optJSONObject(n) ?: continue
+                    when (node.optString("type", "")) {
+                        "TEXT_NODE_TYPE_WORD" -> {
+                            paraText.append(node.optJSONObject("word")?.optString("words", "") ?: "")
+                        }
+                        "TEXT_NODE_TYPE_RICH" -> {
+                            val rich = node.optJSONObject("rich") ?: continue
+                            paraText.append(rich.optString("text", ""))
+                            // 段落内图片
+                            rich.optJSONArray("pics")?.let { picArr ->
+                                for (pi in 0 until picArr.length()) {
+                                    val u = picArr.optJSONObject(pi)?.optString("src", "")
+                                    if (!u.isNullOrBlank() && !images.contains(u)) images.add(u)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (paraText.isNotBlank()) {
+                    if (fullText.isNotEmpty()) fullText.append("\n\n")
+                    fullText.append(paraText.toString())
+                }
+            }
+        }
+
+        // fallback: desc.text
+        if (fullText.isEmpty()) {
+            fullText.append(desc?.optString("text", "") ?: "")
+        }
+
+        return fullText.toString() to images
     }
 
     suspend fun spaceArcSearchPage(

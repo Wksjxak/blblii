@@ -196,6 +196,17 @@ internal class VideoCommentsPanelController(
             )
         views.comments.adapter = commentsAdapter
         views.comments.layoutManager = LinearLayoutManager(context)
+        // TV: 焦点变化时自动滚动到中间，避免评论被裁
+        views.comments.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                val focused = views.comments.focusedChild ?: return@setOnFocusChangeListener
+                views.comments.post {
+                    val lm = views.comments.layoutManager as? LinearLayoutManager ?: return@post
+                    val pos = lm.getPosition(focused)
+                    if (pos >= 0) views.comments.smoothScrollToPosition(pos)
+                }
+            }
+        }
         views.comments.clearOnScrollListeners()
         views.comments.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
