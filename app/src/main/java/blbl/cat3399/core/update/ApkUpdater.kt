@@ -140,7 +140,8 @@ object ApkUpdater {
                 .map { it.trimEnd() }
                 .filterNot {
                     val t = it.trim()
-                    t.startsWith("CDN:") || t.startsWith("CDN：")
+                    t.startsWith("CDN:") || t.startsWith("CDN：") ||
+                        t.startsWith("Build:") || t.startsWith("Build：")
                 }
                 .map { line ->
                     var text = line
