@@ -240,18 +240,16 @@ internal object VideoApi {
         val safeOid = oid.takeIf { it > 0L } ?: error("oid required")
         val safePn = pn.coerceAtLeast(1)
         val safePs = ps.coerceIn(1, 20)
-        val url =
-            BiliClient.withQuery(
-                "https://api.bilibili.com/x/v2/reply",
-                mapOf(
-                    "type" to safeType.toString(),
-                    "oid" to safeOid.toString(),
-                    "sort" to sort.toString(),
-                    "pn" to safePn.toString(),
-                    "ps" to safePs.toString(),
-                    "nohot" to noHot.toString(),
-                ),
-            )
+        val params = mapOf(
+            "type" to safeType.toString(),
+            "oid" to safeOid.toString(),
+            "sort" to sort.toString(),
+            "pn" to safePn.toString(),
+            "ps" to safePs.toString(),
+            "nohot" to noHot.toString(),
+        )
+        val keys = BiliClient.ensureWbiKeys()
+        val url = BiliClient.signedWbiUrlAbsolute("https://api.bilibili.com/x/v2/reply", params, keys)
         val json = BiliClient.getJson(url)
         val code = json.optInt("code", 0)
         if (code != 0) {
@@ -273,17 +271,15 @@ internal object VideoApi {
         val safeRoot = rootRpid.takeIf { it > 0L } ?: error("root required")
         val safePn = pn.coerceAtLeast(1)
         val safePs = ps.coerceIn(1, 49)
-        val url =
-            BiliClient.withQuery(
-                "https://api.bilibili.com/x/v2/reply/reply",
-                mapOf(
-                    "type" to safeType.toString(),
-                    "oid" to safeOid.toString(),
-                    "root" to safeRoot.toString(),
-                    "pn" to safePn.toString(),
-                    "ps" to safePs.toString(),
-                ),
-            )
+        val params = mapOf(
+            "type" to safeType.toString(),
+            "oid" to safeOid.toString(),
+            "root" to safeRoot.toString(),
+            "pn" to safePn.toString(),
+            "ps" to safePs.toString(),
+        )
+        val keys = BiliClient.ensureWbiKeys()
+        val url = BiliClient.signedWbiUrlAbsolute("https://api.bilibili.com/x/v2/reply/reply", params, keys)
         val json = BiliClient.getJson(url)
         val code = json.optInt("code", 0)
         if (code != 0) {

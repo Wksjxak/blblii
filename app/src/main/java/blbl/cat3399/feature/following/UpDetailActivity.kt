@@ -1619,6 +1619,23 @@ class UpDetailActivity : BaseActivity() {
             )
         }
 
+    private fun showFullImage(url: String) {
+        val iv = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
+        }
+        AppPopup.custom(
+            context = this,
+            title = null,
+            cancelable = true,
+            actions = emptyList(),
+            preferredActionRole = null,
+            autoFocus = false,
+            modalSizing = PopupModalSizing(widthRatio = 1f, maxWidthDp = 1920f, maxHeightRatio = 1f),
+            content = { iv },
+        )
+    }
+
     private fun openDynamicDetail(item: DynamicFeedItem.Rich) {
         val density = resources.displayMetrics.density
         val padH = (20 * density).toInt()
@@ -1632,7 +1649,7 @@ class UpDetailActivity : BaseActivity() {
             android.widget.TextView(this).apply {
                 text = item.title
                 setTextColor(android.graphics.Color.WHITE)
-                textSize = 20f
+                textSize = 26f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setPadding(0, 0, 0, padV / 2)
                 container.addView(this)
@@ -1643,8 +1660,8 @@ class UpDetailActivity : BaseActivity() {
             android.widget.TextView(this).apply {
                 text = item.text
                 setTextColor(android.graphics.Color.WHITE)
-                textSize = 16f
-                setLineSpacing(0f, 1.2f)
+                textSize = 20f
+                setLineSpacing(0f, 1.3f)
                 container.addView(this)
             }
         }
@@ -1653,13 +1670,16 @@ class UpDetailActivity : BaseActivity() {
             android.widget.ImageView(this).apply {
                 val lp = android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    (200 * density).toInt(),
+                    (240 * density).toInt(),
                 )
                 lp.topMargin = padV
                 layoutParams = lp
                 scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                 adjustViewBounds = true
+                isFocusable = true
+                isClickable = true
                 blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
+                setOnClickListener { showFullImage(url) }
                 container.addView(this)
             }
         }
