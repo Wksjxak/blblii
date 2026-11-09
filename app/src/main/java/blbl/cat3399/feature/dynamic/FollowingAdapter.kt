@@ -102,7 +102,6 @@ class FollowingAdapter(
             binding.tvName.text = item.name
             val ctx = binding.root.context
             val primaryText = ThemeColor.resolve(ctx, MaterialR.attr.colorOnSurface, blbl.cat3399.R.color.blbl_text)
-            val secondaryText = ThemeColor.resolve(ctx, android.R.attr.textColorSecondary, blbl.cat3399.R.color.blbl_text_secondary)
             if (item.isAll) {
                 binding.ivAvatar.setImageResource(blbl.cat3399.R.drawable.ic_all)
                 binding.ivAvatar.imageTintList =

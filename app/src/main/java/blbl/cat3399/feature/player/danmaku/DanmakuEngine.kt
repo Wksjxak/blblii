@@ -345,7 +345,6 @@ internal class DanmakuEngine(
                     laneCount = maxLaneCount,
                     laneHeight = laneHeight,
                     topInset = topInset,
-                    maxYTop = maxYTop,
                 )
             } else {
                 pruneExpired(width = width, nowMs = nowMs)
@@ -355,10 +354,8 @@ internal class DanmakuEngine(
                     outlinePad = outlinePad,
                     rollingDurationMs = rollingDurationMs,
                     fixedDurationMs = fixedDurationMs,
-                    laneCount = maxLaneCount,
                     laneHeight = laneHeight,
                     topInset = topInset,
-                    maxYTop = maxYTop,
                 )
                 spawnNewItems(
                     nowMs = nowMs,
@@ -366,10 +363,8 @@ internal class DanmakuEngine(
                     outlinePad = outlinePad,
                     rollingDurationMs = rollingDurationMs,
                     fixedDurationMs = fixedDurationMs,
-                    laneCount = maxLaneCount,
                     laneHeight = laneHeight,
                     topInset = topInset,
-                    maxYTop = maxYTop,
                 )
             }
 
@@ -555,7 +550,6 @@ internal class DanmakuEngine(
                 laneCount = configuredLaneCount.coerceAtLeast(1),
                 laneHeight = configuredLaneHeightPx.takeIf { it > 0f } ?: max(18f, textSizePx * 1.15f),
                 topInset = configuredTopInsetPx,
-                maxYTop = configuredMaxYTopPx.coerceAtLeast(configuredTopInsetPx.toFloat()),
             )
             publishSnapshotIfDirty(pos)
         }
@@ -635,7 +629,6 @@ internal class DanmakuEngine(
         laneCount: Int,
         laneHeight: Float,
         topInset: Int,
-        maxYTop: Float,
     ) {
         clearActives()
         pending.clear()
@@ -663,10 +656,8 @@ internal class DanmakuEngine(
                 outlinePad = outlinePad,
                 rollingDurationMs = rollingDurationMs,
                 fixedDurationMs = fixedDurationMs,
-                laneCount = laneCount,
                 laneHeight = laneHeight,
                 topInset = topInset,
-                maxYTop = maxYTop,
                 allowPending = false,
             )
         }
@@ -704,10 +695,8 @@ internal class DanmakuEngine(
         outlinePad: Float,
         rollingDurationMs: Int,
         fixedDurationMs: Int,
-        laneCount: Int,
         laneHeight: Float,
         topInset: Int,
-        maxYTop: Float,
     ) {
         if (pending.isEmpty()) return
         val pendingCount = pending.size
@@ -733,10 +722,8 @@ internal class DanmakuEngine(
                     outlinePad = outlinePad,
                     rollingDurationMs = rollingDurationMs,
                     fixedDurationMs = fixedDurationMs,
-                    laneCount = laneCount,
                     laneHeight = laneHeight,
                     topInset = topInset,
-                    maxYTop = maxYTop,
                     allowPending = false,
                 )
             if (admitted) continue
@@ -754,10 +741,8 @@ internal class DanmakuEngine(
         outlinePad: Float,
         rollingDurationMs: Int,
         fixedDurationMs: Int,
-        laneCount: Int,
         laneHeight: Float,
         topInset: Int,
-        maxYTop: Float,
     ) {
         skipOld(nowMs, rollingDurationMs)
         dropIfLagging(nowMs)
@@ -775,10 +760,8 @@ internal class DanmakuEngine(
                 outlinePad = outlinePad,
                 rollingDurationMs = rollingDurationMs,
                 fixedDurationMs = fixedDurationMs,
-                laneCount = laneCount,
                 laneHeight = laneHeight,
                 topInset = topInset,
-                maxYTop = maxYTop,
                 allowPending = true,
             )
         }
@@ -791,10 +774,8 @@ internal class DanmakuEngine(
         outlinePad: Float,
         rollingDurationMs: Int,
         fixedDurationMs: Int,
-        laneCount: Int,
         laneHeight: Float,
         topInset: Int,
-        maxYTop: Float,
         allowPending: Boolean,
     ): Boolean {
         val textWidth = measureTextWidth(item, outlinePad)
