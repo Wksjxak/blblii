@@ -386,6 +386,9 @@ class UpDetailActivity : BaseActivity() {
                     )
                 },
                 onRichClick = { item ->
+                    openDynamicDetail(item)
+                },
+                onRichLongClick = { item ->
                     openDynamicComments(item)
                 },
             )
@@ -1615,6 +1618,76 @@ class UpDetailActivity : BaseActivity() {
                 canAdvance = page.hasMore && page.items.isNotEmpty(),
             )
         }
+
+    private fun openDynamicDetail(item: DynamicFeedItem.Rich) {
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (16 * density).toInt()
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, padV)
+        }
+        // 标题
+        if (!item.title.isNullOrBlank()) {
+            android.widget.TextView(this).apply {
+                text = item.title
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 20f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(0, 0, 0, padV / 2)
+                container.addView(this)
+            }
+        }
+        // 正文
+        if (item.text.isNotBlank()) {
+            android.widget.TextView(this).apply {
+                text = item.text
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 16f
+                setLineSpacing(0f, 1.2f)
+                container.addView(this)
+            }
+        }
+        // 图片
+        item.images.forEach { url ->
+            android.widget.ImageView(this).apply {
+                val lp = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    (200 * density).toInt(),
+                )
+                lp.topMargin = padV
+                layoutParams = lp
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                adjustViewBounds = true
+                blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
+                container.addView(this)
+            }
+        }
+        val scroll = android.widget.ScrollView(this).apply {
+            isFillViewport = true
+        }
+        val outer = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(container, android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        scroll.addView(outer)
+        AppPopup.custom(
+            context = this,
+            title = "动态详情",
+            cancelable = true,
+            actions = emptyList(),
+            preferredActionRole = null,
+            autoFocus = false,
+            modalSizing = PopupModalSizing(
+                widthRatio = 0.86f,
+                maxWidthDp = 1120f,
+                maxHeightRatio = 0.85f,
+            ),
+            content = { scroll },
+        )
+    }
 
     private fun openDynamicComments(item: DynamicFeedItem.Rich) {
         val oid = item.dynOid

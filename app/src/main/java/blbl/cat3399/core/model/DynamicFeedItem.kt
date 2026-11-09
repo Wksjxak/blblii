@@ -19,6 +19,10 @@ sealed class DynamicFeedItem {
         val authorName: String,
         val authorFace: String?,
         val pubTs: Long?,
+        val origAuthor: String? = null,
+        val origTitle: String? = null,
+        val origText: String? = null,
+        val origCover: String? = null,
     ) : DynamicFeedItem() {
         override val stableKey: String get() = "rich:$dynId"
     }

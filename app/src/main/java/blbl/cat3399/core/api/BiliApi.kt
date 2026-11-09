@@ -1861,8 +1861,50 @@ object BiliApi {
                 val rawId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
                     "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
-                val dynOid = runCatching { it.optLong("id", 0L).takeIf { v -> v > 0L }
-                    ?: it.optString("id_str", "").toLongOrNull() }.getOrNull()
+                val dynOid = runCatching {
+                    desc?.optLong("dyn_id", 0L)?.takeIf { v -> v > 0L }
+                        ?: desc?.optString("dyn_str", "")?.toLongOrNull()
+                        ?: it.optLong("id", 0L).takeIf { v -> v > 0L }
+                        ?: it.optString("id_str", "").toLongOrNull()
+                }.getOrNull()
+
+                // 转发原动态摘要
+                var origAuthor: String? = null
+                var origTitle: String? = null
+                var origText: String? = null
+                var origCover: String? = null
+                val orig = moduleDynamic.optJSONObject("orig")
+                if (orig != null) {
+                    val origModules = orig.optJSONObject("modules")
+                    origModules?.optJSONObject("module_author")?.let {
+                        origAuthor = it.optString("name", "").trim().ifBlank { null }
+                    }
+                    val origDynamic = origModules?.optJSONObject("module_dynamic")
+                    val origDesc = origDynamic?.optJSONObject("desc")
+                    origText = origDesc?.optString("text", "")?.trim()?.ifBlank { null }
+                    val origMajor = origDynamic?.optJSONObject("major")
+                    // 原视频
+                    origMajor?.optJSONObject("archive")?.let { arc ->
+                        origTitle = arc.optString("title", "").trim().ifBlank { null }
+                        origCover = arc.optString("pic", "").trim().ifBlank { null }
+                    }
+                    // 原图文/专栏
+                    if (origTitle == null) {
+                        origMajor?.optJSONObject("opus")?.let { op ->
+                            origTitle = op.optString("title", "").trim().ifBlank { null }
+                            if (origCover == null) {
+                                origCover = op.optJSONArray("pics")?.optJSONObject(0)?.optString("url", "")?.trim()?.ifBlank { null }
+                            }
+                        }
+                    }
+                    // 原图动态
+                    if (origCover == null) {
+                        origMajor?.optJSONObject("draw")?.let { dr ->
+                            origCover = dr.optJSONArray("items")?.optJSONObject(0)?.optString("src", "")?.trim()?.ifBlank { null }
+                        }
+                    }
+                }
+
                 cards.add(
                     DynamicFeedItem.Rich(
                         dynId = rawId,
@@ -1873,6 +1915,10 @@ object BiliApi {
                         authorName = ownerName,
                         authorFace = ownerFace,
                         pubTs = authorPubTs,
+                        origAuthor = origAuthor,
+                        origTitle = origTitle,
+                        origText = origText,
+                        origCover = origCover,
                     ),
                 )
             }

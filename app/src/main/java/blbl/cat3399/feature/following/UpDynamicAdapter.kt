@@ -21,6 +21,7 @@ import blbl.cat3399.databinding.ItemVideoCardBinding
 class UpDynamicAdapter(
     private val onVideoClick: (VideoCard) -> Unit,
     private val onRichClick: (DynamicFeedItem.Rich) -> Unit,
+    private val onRichLongClick: (DynamicFeedItem.Rich) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = ArrayList<DynamicFeedItem>()
@@ -60,7 +61,7 @@ class UpDynamicAdapter(
                 ItemVideoCardBinding.inflate(inflater, parent, false),
                 onVideoClick,
             )
-            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick)
+            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick, onRichLongClick)
         }
     }
 
@@ -114,6 +115,7 @@ class UpDynamicAdapter(
     class RichVh(
         private val binding: ItemUpDynamicRichBinding,
         private val onClick: (DynamicFeedItem.Rich) -> Unit,
+        private val onLongClick: (DynamicFeedItem.Rich) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: DynamicFeedItem.Rich) {
             binding.tvRichTime.text = item.pubTs?.let { Format.pubDateText(it) }.orEmpty()
@@ -135,6 +137,7 @@ class UpDynamicAdapter(
                 }
             }
             binding.root.setOnClickListener { onClick(item) }
+            binding.root.setOnLongClickListener { onLongClick(item); true }
             binding.rowRichImages.visibility =
                 if (item.images.isEmpty()) View.GONE else View.VISIBLE
             val imgs = listOf(binding.ivRichImg1, binding.ivRichImg2, binding.ivRichImg3)
@@ -145,6 +148,26 @@ class UpDynamicAdapter(
                     ImageLoader.loadInto(iv, url)
                 } else {
                     iv.visibility = View.GONE
+                }
+            }
+            // 转发原动态摘要
+            val origText = item.origText
+            val origTitle = item.origTitle
+            val origAuthor = item.origAuthor
+            if (origText == null && origTitle == null && item.origCover == null) {
+                binding.boxRichOrig.visibility = View.GONE
+            } else {
+                binding.boxRichOrig.visibility = View.VISIBLE
+                val sb = StringBuilder()
+                if (!origAuthor.isNullOrBlank()) sb.append("@").append(origAuthor).append("：")
+                if (!origTitle.isNullOrBlank()) sb.append(origTitle)
+                else if (!origText.isNullOrBlank()) sb.append(origText)
+                binding.tvRichOrigText.text = sb.toString()
+                if (!item.origCover.isNullOrBlank()) {
+                    binding.ivRichOrigCover.visibility = View.VISIBLE
+                    ImageLoader.loadInto(binding.ivRichOrigCover, item.origCover)
+                } else {
+                    binding.ivRichOrigCover.visibility = View.GONE
                 }
             }
         }

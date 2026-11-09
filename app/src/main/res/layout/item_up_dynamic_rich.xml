@@ -86,5 +86,36 @@
                 android:contentDescription="@string/app_name" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/box_rich_orig"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_up_dynamic_orig"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="10dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/iv_rich_orig_cover"
+                android:layout_width="80dp"
+                android:layout_height="60dp"
+                android:scaleType="centerCrop"
+                android:contentDescription="@string/app_name"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_rich_orig_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
