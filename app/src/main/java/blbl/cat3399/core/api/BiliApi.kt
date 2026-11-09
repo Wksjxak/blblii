@@ -1962,73 +1962,81 @@ object BiliApi {
     }
 
     /**
-     * 解析 opus.paragraphs：按原始顺序产出文字段/图片段/分割线。
-     * para 类型不靠猜，直接看哪个字段存在：
-     * text.nodes[] 文字、pics.pics[] 图片、line 分割线、list.items[] 列表。
+     * 解析 paragraphs：按原始顺序产出文字段/图片段/分割线。
+     * 优先看 para_type（1文字 2图片 3分割线 4引用 5列表 7代码），缺失时按字段存在性判断。
+     * 图片段在 opus 里是 pic.pics[]，部分接口是 pics.pics[]。
      */
     private fun parseOpusParagraphs(arr: org.json.JSONArray?): List<DynamicParagraph> {
         if (arr == null || arr.length() == 0) return emptyList()
         val out = ArrayList<DynamicParagraph>()
+
+        fun readNodes(nodes: org.json.JSONArray?): String {
+            if (nodes == null || nodes.length() == 0) return ""
+            val sb = StringBuilder()
+            for (n in 0 until nodes.length()) {
+                val node = nodes.optJSONObject(n) ?: continue
+                when (node.optString("type", "")) {
+                    "TEXT_NODE_TYPE_WORD" -> sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
+                    "TEXT_NODE_TYPE_RICH" -> sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
+                }
+            }
+            return sb.toString()
+        }
+
+        fun readPics(container: JSONObject?): List<String> {
+            if (container == null) return emptyList()
+            val pics = container.optJSONArray("pics") ?: return emptyList()
+            val urls = ArrayList<String>()
+            for (pi in 0 until pics.length()) {
+                val o = pics.optJSONObject(pi) ?: continue
+                val u = o.optString("url", "").ifBlank { o.optString("src", "") }
+                    .ifBlank { o.optString("item", "") }
+                if (u.isNotBlank()) urls.add(u)
+            }
+            return urls
+        }
+
         for (p in 0 until arr.length()) {
             val para = arr.optJSONObject(p) ?: continue
-
-            // 文字段 / 引用段
-            val nodes = para.optJSONObject("text")?.optJSONArray("nodes")
-            if (nodes != null && nodes.length() > 0) {
-                val sb = StringBuilder()
-                for (n in 0 until nodes.length()) {
-                    val node = nodes.optJSONObject(n) ?: continue
-                    when (node.optString("type", "")) {
-                        "TEXT_NODE_TYPE_WORD" -> {
-                            sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
-                        }
-                        "TEXT_NODE_TYPE_RICH" -> {
-                            sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
-                        }
-                    }
+            when (para.optInt("para_type", 0)) {
+                1, 4 -> {
+                    val t = readNodes(para.optJSONObject("text")?.optJSONArray("nodes"))
+                    if (t.isNotBlank()) out.add(DynamicParagraph.Text(t))
                 }
-                if (sb.isNotBlank()) out.add(DynamicParagraph.Text(sb.toString()))
-                continue
-            }
-
-            // 图片段
-            val pics = para.optJSONObject("pics")?.optJSONArray("pics")
-            if (pics != null && pics.length() > 0) {
-                for (pi in 0 until pics.length()) {
-                    val o = pics.optJSONObject(pi) ?: continue
-                    val u = o.optString("url", "").ifBlank { o.optString("src", "") }
-                    if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                2 -> {
+                    var imgs = readPics(para.optJSONObject("pic"))
+                    if (imgs.isEmpty()) imgs = readPics(para.optJSONObject("pics"))
+                    imgs.forEach { out.add(DynamicParagraph.Image(it)) }
                 }
-                continue
-            }
-
-            // 列表段：list.items[].text.nodes
-            val listItems = para.optJSONObject("list")?.optJSONArray("items")
-            if (listItems != null && listItems.length() > 0) {
-                for (li in 0 until listItems.length()) {
-                    val item = listItems.optJSONObject(li) ?: continue
-                    val liNodes = item.optJSONObject("text")?.optJSONArray("nodes") ?: continue
-                    val sb = StringBuilder()
-                    for (n in 0 until liNodes.length()) {
-                        val node = liNodes.optJSONObject(n) ?: continue
-                        when (node.optString("type", "")) {
-                            "TEXT_NODE_TYPE_WORD" -> {
-                                sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
-                            }
-                            "TEXT_NODE_TYPE_RICH" -> {
-                                sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
-                            }
+                3 -> out.add(DynamicParagraph.Separator)
+                5 -> {
+                    val listItems = para.optJSONObject("list")?.optJSONArray("items")
+                    if (listItems != null) {
+                        for (li in 0 until listItems.length()) {
+                            val item = listItems.optJSONObject(li) ?: continue
+                            val t = readNodes(item.optJSONObject("text")?.optJSONArray("nodes"))
+                            if (t.isNotBlank()) out.add(DynamicParagraph.Text("· $t"))
                         }
                     }
-                    if (sb.isNotBlank()) out.add(DynamicParagraph.Text("· " + sb.toString()))
                 }
-                continue
-            }
-
-            // 分割线
-            if (para.optJSONObject("line") != null) {
-                out.add(DynamicParagraph.Separator)
-                continue
+                7 -> {
+                    val code = para.optJSONObject("code")?.optString("content", "").orEmpty()
+                    if (code.isNotBlank()) out.add(DynamicParagraph.Text(code))
+                }
+                else -> {
+                    // 兼容没有 para_type 的响应
+                    val t = readNodes(para.optJSONObject("text")?.optJSONArray("nodes"))
+                    if (t.isNotBlank()) {
+                        out.add(DynamicParagraph.Text(t))
+                        continue
+                    }
+                    var imgs = readPics(para.optJSONObject("pic"))
+                    if (imgs.isEmpty()) imgs = readPics(para.optJSONObject("pics"))
+                    imgs.forEach { out.add(DynamicParagraph.Image(it)) }
+                    if (imgs.isEmpty() && para.optJSONObject("line") != null) {
+                        out.add(DynamicParagraph.Separator)
+                    }
+                }
             }
         }
         return out
@@ -2172,93 +2180,106 @@ object BiliApi {
         return UpDynamicPage(cards, nextOffset)
     }
 
-    /** 动态详情：拉完整正文和全部图片。返回 (fullText, allImages) */
+    /**
+     * 动态详情：拉完整图文段落。
+     * 优先 /opus/detail（响应里 modules 是数组，正文在 MODULE_TYPE_CONTENT.module_content.paragraphs），
+     * 失败再回落 /detail（modules 是对象，正文在 module_dynamic.major.opus.paragraphs）。
+     */
     suspend fun dynamicDetail(dynId: String): List<DynamicParagraph> {
-        val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=$dynId&features=itemOpusStyle,opusBigCover"
-        val json = BiliClient.getJson(url)
-        val item = json.optJSONObject("data")?.optJSONObject("item")
-            ?: return emptyList()
-        val modules = item.optJSONObject("modules")
-        val moduleDynamic = modules?.optJSONObject("module_dynamic")
-        val desc = moduleDynamic?.optJSONObject("desc")
-        val major = moduleDynamic?.optJSONObject("major")
-        val opus = major?.optJSONObject("opus")
+        val features =
+            "onlyfansVote,onlyfansAssetsV2,decorationCard,htmlNewStyle,ugcDelete,editable," +
+                "opusPrivateVisible,tribeeEdit,avatarAutoTheme,avatarTypeOpus,itemOpusStyle,opusBigCover"
 
-        val paragraphs = mutableListOf<DynamicParagraph>()
-
-        // ---- 按段落顺序解析 opus 正文 ----
-        val paraArr = opus?.optJSONArray("paragraphs")
-        if (paraArr != null && paraArr.length() > 0) {
-            for (p in 0 until paraArr.length()) {
-                val para = paraArr.optJSONObject(p) ?: continue
-                // 文字段：text.nodes[]
-                val nodes = para.optJSONObject("text")?.optJSONArray("nodes")
-                if (nodes != null && nodes.length() > 0) {
-                    val sb = StringBuilder()
-                    for (n in 0 until nodes.length()) {
-                        val node = nodes.optJSONObject(n) ?: continue
-                        when (node.optString("type", "")) {
-                            "TEXT_NODE_TYPE_WORD" -> {
-                                sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
-                            }
-                            "TEXT_NODE_TYPE_RICH" -> {
-                                sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
-                            }
-                        }
-                    }
-                    if (sb.isNotBlank()) {
-                        paragraphs.add(DynamicParagraph.Text(sb.toString()))
-                    }
-                    continue
-                }
-                // 图片段：pics.pics[]
-                val picsArr = para.optJSONObject("pics")?.optJSONArray("pics")
-                if (picsArr != null && picsArr.length() > 0) {
-                    for (pi in 0 until picsArr.length()) {
-                        val u = picsArr.optJSONObject(pi)?.optString("url", "")
-                        if (!u.isNullOrBlank()) {
-                            paragraphs.add(DynamicParagraph.Image(u))
-                        }
-                    }
-                    continue
-                }
-                // 分割线段：line
-                if (para.optJSONObject("line") != null) {
-                    paragraphs.add(DynamicParagraph.Separator)
-                    continue
-                }
+        // 1) opus/detail
+        runCatching {
+            val url =
+                BiliClient.withQuery(
+                    "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail",
+                    linkedMapOf("id" to dynId, "features" to features),
+                )
+            val json = BiliClient.getJson(url)
+            val code = json.optInt("code", -1)
+            val item = json.optJSONObject("data")?.optJSONObject("item")
+            if (code == 0 && item != null) {
+                val paras = extractParagraphsFromItem(item)
+                AppLog.d(TAG, "opusDetail dyn=$dynId code=$code paras=${paras.size}")
+                if (paras.isNotEmpty()) return paras
+            } else {
+                AppLog.w(TAG, "opusDetail dyn=$dynId code=$code msg=${json.optString("message", "")}")
             }
         }
 
-        // ---- fallback: 没有 paragraphs 时用 desc.text + 批量图片 ----
-        if (paragraphs.isEmpty()) {
-            val descText = desc?.optString("text", "").orEmpty()
-            if (descText.isNotBlank()) {
-                paragraphs.add(DynamicParagraph.Text(descText))
+        // 2) 回落 web-dynamic/detail
+        val json =
+            BiliClient.getJson(
+                BiliClient.withQuery(
+                    "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail",
+                    linkedMapOf("id" to dynId, "features" to features),
+                ),
+            )
+        val item = json.optJSONObject("data")?.optJSONObject("item") ?: return emptyList()
+        val paras = extractParagraphsFromItem(item)
+        AppLog.d(TAG, "detailFallback dyn=$dynId code=${json.optInt("code", -1)} paras=${paras.size}")
+        return paras
+    }
+
+    /** 从 item 里找正文段落，兼容 modules 为数组（opus/detail）和对象（feed/detail）两种形态 */
+    private fun extractParagraphsFromItem(item: JSONObject): List<DynamicParagraph> {
+        val modulesNode = item.opt("modules")
+
+        // opus/detail: modules 是数组，正文在 MODULE_TYPE_CONTENT
+        if (modulesNode is JSONArray) {
+            for (i in 0 until modulesNode.length()) {
+                val m = modulesNode.optJSONObject(i) ?: continue
+                val mc = m.optJSONObject("module_content") ?: continue
+                val pars = mc.optJSONArray("paragraphs") ?: continue
+                val out = parseOpusParagraphs(pars)
+                if (out.isNotEmpty()) return out
             }
-            // draw 类型动态
-            major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
-                for (k in 0 until arr.length()) {
-                    val u = arr.optJSONObject(k)?.optString("src", "")
-                    if (!u.isNullOrBlank()) {
-                        paragraphs.add(DynamicParagraph.Image(u))
-                    }
+        }
+
+        // feed/detail: modules 是对象
+        if (modulesNode is JSONObject) {
+            // 可能直接是 module_content
+            modulesNode.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
+                val out = parseOpusParagraphs(pars)
+                if (out.isNotEmpty()) return out
+            }
+            val moduleDynamic = modulesNode.optJSONObject("module_dynamic")
+            if (moduleDynamic != null) {
+                moduleDynamic.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
+                    val out = parseOpusParagraphs(pars)
+                    if (out.isNotEmpty()) return out
                 }
-            }
-            // opus 批量图片（fallback）
-            if (paragraphs.isEmpty()) {
-                opus?.optJSONArray("pics")?.let { arr ->
+                val major = moduleDynamic.optJSONObject("major")
+                val opus = major?.optJSONObject("opus")
+                opus?.optJSONArray("paragraphs")?.let { pars ->
+                    val out = parseOpusParagraphs(pars)
+                    if (out.isNotEmpty()) return out
+                }
+
+                // 兜底：desc.text + draw/opus 图片
+                val fallback = ArrayList<DynamicParagraph>()
+                val descText = moduleDynamic.optJSONObject("desc")?.optString("text", "").orEmpty()
+                if (descText.isNotBlank()) fallback.add(DynamicParagraph.Text(descText))
+                major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
                     for (k in 0 until arr.length()) {
-                        val u = arr.optJSONObject(k)?.optString("url", "")
-                        if (!u.isNullOrBlank()) {
-                            paragraphs.add(DynamicParagraph.Image(u))
+                        val u = arr.optJSONObject(k)?.optString("src", "")
+                        if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
+                    }
+                }
+                if (fallback.none { it is DynamicParagraph.Image }) {
+                    opus?.optJSONArray("pics")?.let { arr ->
+                        for (k in 0 until arr.length()) {
+                            val u = arr.optJSONObject(k)?.optString("url", "")
+                            if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
                         }
                     }
                 }
+                return fallback
             }
         }
-
-        return paragraphs
+        return emptyList()
     }
 
     suspend fun spaceArcSearchPage(

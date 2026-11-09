@@ -1777,7 +1777,7 @@ class UpDetailActivity : BaseActivity() {
             }
         }
 
-        // 列表接口已经带回完整段落，直接用，不再等二次请求
+        // 列表接口的 desc.text 只是摘要，完整图文必须靠详情接口补
         val initialParas =
             if (item.paragraphs.isNotEmpty()) {
                 item.paragraphs
@@ -1788,6 +1788,7 @@ class UpDetailActivity : BaseActivity() {
                 }
             }
         renderParagraphs(item.title, initialParas)
+        AppLog.d("UpDetail", "openDynamicDetail dyn=${item.dynId} initial=${initialParas.size}")
 
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -1800,18 +1801,16 @@ class UpDetailActivity : BaseActivity() {
         }
         scroll.addView(outer)
 
-        // 只有在本地段落缺失时才回落请求详情接口；失败要留痕，不能静默
-        if (initialParas.isEmpty()) {
-            lifecycleScope.launch {
-                runCatching {
-                    BiliApi.dynamicDetail(item.dynId)
-                }.onSuccess { paras ->
-                    if (paras.isNotEmpty()) {
-                        runOnUiThread { renderParagraphs(item.title, paras) }
-                    }
-                }.onFailure { t ->
-                    AppLog.w("UpDetail", "dynamicDetail failed dynId=${item.dynId}: ${t.message}")
+        lifecycleScope.launch {
+            runCatching {
+                BiliApi.dynamicDetail(item.dynId)
+            }.onSuccess { paras ->
+                AppLog.d("UpDetail", "dynamicDetail ok dyn=${item.dynId} paras=${paras.size}")
+                if (paras.isNotEmpty() && container.isAttachedToWindow) {
+                    runOnUiThread { renderParagraphs(item.title, paras) }
                 }
+            }.onFailure { t ->
+                AppLog.w("UpDetail", "dynamicDetail failed dyn=${item.dynId}: ${t.message}")
             }
         }
 
