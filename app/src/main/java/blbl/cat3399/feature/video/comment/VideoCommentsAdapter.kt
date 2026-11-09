@@ -105,6 +105,7 @@ internal class VideoCommentsAdapter(
             onTouchClick = onTouchClick,
             onPictureClick = onPictureClick,
             onLongClick = onLongClick,
+            textSizeSpOverride = textSizeSpOverride,
         )
     }
 
@@ -132,6 +133,7 @@ internal class VideoCommentsAdapter(
             onTouchClick: (VideoCommentItem) -> Unit,
             onPictureClick: (VideoCommentItem, Int) -> Unit,
             onLongClick: (VideoCommentItem) -> Boolean,
+            textSizeSpOverride: Float?,
         ) {
             boundRpid = item.rpid
             rootClickFromTouch = false
