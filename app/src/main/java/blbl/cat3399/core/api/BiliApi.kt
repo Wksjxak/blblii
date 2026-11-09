@@ -2081,87 +2081,92 @@ object BiliApi {
     }
 
     /** 动态详情：拉完整正文和全部图片。返回 (fullText, allImages) */
-    suspend fun dynamicDetail(dynId: String): Pair<String, List<String>> {
+    suspend fun dynamicDetail(dynId: String): List<blbl.cat3399.core.model.DynamicParagraph> {
         val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=$dynId&features=itemOpusStyle,opusBigCover"
         val json = BiliClient.getJson(url)
         val item = json.optJSONObject("data")?.optJSONObject("item")
-            ?: return "" to emptyList()
+            ?: return emptyList()
         val modules = item.optJSONObject("modules")
         val moduleDynamic = modules?.optJSONObject("module_dynamic")
         val desc = moduleDynamic?.optJSONObject("desc")
         val major = moduleDynamic?.optJSONObject("major")
-
-        val images = mutableListOf<String>()
-        val fullText = StringBuilder()
-
-        // opus 全部图片
         val opus = major?.optJSONObject("opus")
-        opus?.optJSONArray("pics")?.let { arr ->
-            for (k in 0 until arr.length()) {
-                val u = arr.optJSONObject(k)?.optString("url", "")
-                if (!u.isNullOrBlank()) images.add(u)
-            }
-        }
-        // draw 全部图片
-        major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
-            for (k in 0 until arr.length()) {
-                val u = arr.optJSONObject(k)?.optString("src", "")
-                if (!u.isNullOrBlank()) images.add(u)
-            }
-        }
 
-        // opus 正文：从 paragraphs[].text.nodes[] 提取
-        val paragraphs = opus?.optJSONArray("paragraphs")
-        if (paragraphs != null && paragraphs.length() > 0) {
-            for (p in 0 until paragraphs.length()) {
-                val para = paragraphs.optJSONObject(p) ?: continue
-                val nodes = para.optJSONObject("text")?.optJSONArray("nodes") ?: continue
-                val paraText = StringBuilder()
-                for (n in 0 until nodes.length()) {
-                    val node = nodes.optJSONObject(n) ?: continue
-                    when (node.optString("type", "")) {
-                        "TEXT_NODE_TYPE_WORD" -> {
-                            paraText.append(node.optJSONObject("word")?.optString("words", "") ?: "")
-                        }
-                        "TEXT_NODE_TYPE_RICH" -> {
-                            val rich = node.optJSONObject("rich") ?: continue
-                            paraText.append(rich.optString("text", ""))
-                            // 段落内图片
-                            rich.optJSONArray("pics")?.let { picArr ->
-                                for (pi in 0 until picArr.length()) {
-                                    val u = picArr.optJSONObject(pi)?.optString("src", "")
-                                    if (!u.isNullOrBlank() && !images.contains(u)) images.add(u)
-                                }
+        val paragraphs = mutableListOf<blbl.cat3399.core.model.DynamicParagraph>()
+
+        // ---- 按段落顺序解析 opus 正文 ----
+        val paraArr = opus?.optJSONArray("paragraphs")
+        if (paraArr != null && paraArr.length() > 0) {
+            for (p in 0 until paraArr.length()) {
+                val para = paraArr.optJSONObject(p) ?: continue
+                // 文字段：text.nodes[]
+                val nodes = para.optJSONObject("text")?.optJSONArray("nodes")
+                if (nodes != null && nodes.length() > 0) {
+                    val sb = StringBuilder()
+                    for (n in 0 until nodes.length()) {
+                        val node = nodes.optJSONObject(n) ?: continue
+                        when (node.optString("type", "")) {
+                            "TEXT_NODE_TYPE_WORD" -> {
+                                sb.append(node.optJSONObject("word")?.optString("words", "") ?: "")
+                            }
+                            "TEXT_NODE_TYPE_RICH" -> {
+                                sb.append(node.optJSONObject("rich")?.optString("text", "") ?: "")
                             }
                         }
                     }
+                    if (sb.isNotBlank()) {
+                        paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Text(sb.toString()))
+                    }
+                    continue
                 }
-                if (paraText.isNotBlank()) {
-                    if (fullText.isNotEmpty()) fullText.append("\n\n")
-                    fullText.append(paraText.toString())
+                // 图片段：pics.pics[]
+                val picsArr = para.optJSONObject("pics")?.optJSONArray("pics")
+                if (picsArr != null && picsArr.length() > 0) {
+                    for (pi in 0 until picsArr.length()) {
+                        val u = picsArr.optJSONObject(pi)?.optString("url", "")
+                        if (!u.isNullOrBlank()) {
+                            paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                        }
+                    }
+                    continue
                 }
-            }
-        }
-
-        // fallback: desc.text
-        if (fullText.isEmpty()) {
-            fullText.append(desc?.optString("text", "") ?: "")
-        }
-
-        // 用 /detail/pic 接口拿全部图片（更可靠）
-        runCatching {
-            val picJson = BiliClient.getJson("https://api.bilibili.com/x/polymer/web-dynamic/v1/detail/pic?id=$dynId")
-            val picArr = picJson.optJSONArray("data")
-            if (picArr != null && picArr.length() > 0) {
-                images.clear()
-                for (i in 0 until picArr.length()) {
-                    val u = picArr.optJSONObject(i)?.optString("src", "")
-                    if (!u.isNullOrBlank()) images.add(u)
+                // 分割线段：line
+                if (para.optJSONObject("line") != null) {
+                    paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Separator)
+                    continue
                 }
             }
         }
 
-        return fullText.toString() to images
+        // ---- fallback: 没有 paragraphs 时用 desc.text + 批量图片 ----
+        if (paragraphs.isEmpty()) {
+            val descText = desc?.optString("text", "").orEmpty()
+            if (descText.isNotBlank()) {
+                paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Text(descText))
+            }
+            // draw 类型动态
+            major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
+                for (k in 0 until arr.length()) {
+                    val u = arr.optJSONObject(k)?.optString("src", "")
+                    if (!u.isNullOrBlank()) {
+                        paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                    }
+                }
+            }
+            // opus 批量图片（fallback）
+            if (paragraphs.isEmpty()) {
+                opus?.optJSONArray("pics")?.let { arr ->
+                    for (k in 0 until arr.length()) {
+                        val u = arr.optJSONObject(k)?.optString("url", "")
+                        if (!u.isNullOrBlank()) {
+                            paragraphs.add(blbl.cat3399.core.model.DynamicParagraph.Image(u))
+                        }
+                    }
+                }
+            }
+        }
+
+        return paragraphs
     }
 
     suspend fun spaceArcSearchPage(

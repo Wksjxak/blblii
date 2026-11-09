@@ -1716,12 +1716,13 @@ class UpDetailActivity : BaseActivity() {
             setPadding(padH, padV, padH, padV)
         }
 
-        fun renderContent(title: String?, text: String, images: List<String>) {
+        val fullWidthLp = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+
+        fun renderParagraphs(title: String?, paragraphs: List<blbl.cat3399.core.model.DynamicParagraph>) {
             container.removeAllViews()
-            val fullWidthLp = android.widget.LinearLayout.LayoutParams(
-                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            )
             if (!title.isNullOrBlank()) {
                 android.widget.TextView(this).apply {
                     this.text = title
@@ -1732,34 +1733,58 @@ class UpDetailActivity : BaseActivity() {
                     container.addView(this, fullWidthLp)
                 }
             }
-            if (text.isNotBlank()) {
-                android.widget.TextView(this).apply {
-                    this.text = text
-                    setTextColor(android.graphics.Color.WHITE)
-                    textSize = BiliClient.prefs.dynamicDetailTextSize
-                    setLineSpacing(0f, 1.3f)
-                    container.addView(this, fullWidthLp)
-                }
-            }
-            images.forEach { url ->
-                android.widget.ImageView(this).apply {
-                    val lp = android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        (240 * density).toInt(),
-                    )
-                    lp.topMargin = padV
-                    scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                    isFocusable = true
-                    isClickable = true
-                    blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
-                    setOnClickListener { showFullImage(url, triggerView = this) }
-                    container.addView(this, lp)
+            paragraphs.forEach { para ->
+                when (para) {
+                    is blbl.cat3399.core.model.DynamicParagraph.Text -> {
+                        android.widget.TextView(this).apply {
+                            this.text = para.text
+                            setTextColor(android.graphics.Color.WHITE)
+                            textSize = BiliClient.prefs.dynamicDetailTextSize
+                            setLineSpacing(0f, 1.3f)
+                            setPadding(0, padV / 4, 0, padV / 4)
+                            container.addView(this, fullWidthLp)
+                        }
+                    }
+                    is blbl.cat3399.core.model.DynamicParagraph.Image -> {
+                        android.widget.ImageView(this).apply {
+                            val lp = android.widget.LinearLayout.LayoutParams(
+                                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                                (240 * density).toInt(),
+                            )
+                            lp.topMargin = padV
+                            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                            isFocusable = true
+                            isClickable = true
+                            blbl.cat3399.core.image.ImageLoader.loadInto(this, para.url)
+                            setOnClickListener { showFullImage(para.url, triggerView = this) }
+                            container.addView(this, lp)
+                        }
+                    }
+                    blbl.cat3399.core.model.DynamicParagraph.Separator -> {
+                        android.view.View(this).apply {
+                            val lp = android.widget.LinearLayout.LayoutParams(
+                                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                                (1 * density).toInt(),
+                            )
+                            lp.topMargin = padV / 2
+                            lp.bottomMargin = padV / 2
+                            setBackgroundColor(0x33FFFFFF)
+                            container.addView(this, lp)
+                        }
+                    }
                 }
             }
         }
 
-        // 先渲染列表里已有的内容
-        renderContent(item.title, item.text, item.images)
+        // 先渲染列表里已有的内容（文字+图片作为初始段落）
+        val initialParas = mutableListOf<blbl.cat3399.core.model.DynamicParagraph>()
+        if (item.text.isNotBlank()) {
+            initialParas.add(blbl.cat3399.core.model.DynamicParagraph.Text(item.text))
+        }
+        item.images.forEach { url ->
+            initialParas.add(blbl.cat3399.core.model.DynamicParagraph.Image(url))
+        }
+        renderParagraphs(item.title, initialParas)
 
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -1772,15 +1797,13 @@ class UpDetailActivity : BaseActivity() {
         }
         scroll.addView(outer)
 
-        // 异步拉完整详情
+        // 异步拉完整详情（按段落顺序的图文混排）
         lifecycleScope.launch {
             runCatching {
                 BiliApi.dynamicDetail(item.dynId)
-            }.onSuccess { (fullText, fullImages) ->
-                if (fullText.isNotBlank() || fullImages.isNotEmpty()) {
-                    val finalText = if (fullText.isNotBlank()) fullText else item.text
-                    val finalImages = if (fullImages.isNotEmpty()) fullImages else item.images
-                    runOnUiThread { renderContent(item.title, finalText, finalImages) }
+            }.onSuccess { paras ->
+                if (paras.isNotEmpty()) {
+                    runOnUiThread { renderParagraphs(item.title, paras) }
                 }
             }
         }

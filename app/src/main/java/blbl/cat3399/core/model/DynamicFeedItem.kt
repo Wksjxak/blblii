@@ -28,3 +28,17 @@ sealed class DynamicFeedItem {
         override val stableKey: String get() = "rich:$dynId"
     }
 }
+
+/**
+ * 动态详情正文的有序段落，用于图文混排渲染。
+ */
+sealed class DynamicParagraph {
+    /** 文字段落，isHeading=true 表示标题/小标题 */
+    data class Text(val text: String, val isHeading: Boolean = false) : DynamicParagraph()
+
+    /** 图片段落 */
+    data class Image(val url: String) : DynamicParagraph()
+
+    /** 分割线 */
+    object Separator : DynamicParagraph()
+}
