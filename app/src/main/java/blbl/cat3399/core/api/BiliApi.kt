@@ -2264,14 +2264,14 @@ object BiliApi {
                 if (descText.isNotBlank()) fallback.add(DynamicParagraph.Text(descText))
                 major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
                     for (k in 0 until arr.length()) {
-                        val u = arr.optJSONObject(k)?.optString("src", "")
+                        val u = arr.optJSONObject(k)?.optString("src", "").orEmpty()
                         if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
                     }
                 }
                 if (fallback.none { it is DynamicParagraph.Image }) {
                     opus?.optJSONArray("pics")?.let { arr ->
                         for (k in 0 until arr.length()) {
-                            val u = arr.optJSONObject(k)?.optString("url", "")
+                            val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
                             if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
                         }
                     }
