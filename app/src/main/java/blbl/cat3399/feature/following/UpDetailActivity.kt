@@ -1644,45 +1644,50 @@ class UpDetailActivity : BaseActivity() {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(padH, padV, padH, padV)
         }
-        // 标题
-        if (!item.title.isNullOrBlank()) {
-            android.widget.TextView(this).apply {
-                text = item.title
-                setTextColor(android.graphics.Color.WHITE)
-                textSize = 26f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, padV / 2)
-                container.addView(this)
+
+        fun renderContent(title: String?, text: String, images: List<String>) {
+            container.removeAllViews()
+            if (!title.isNullOrBlank()) {
+                android.widget.TextView(this).apply {
+                    this.text = title
+                    setTextColor(android.graphics.Color.WHITE)
+                    textSize = 26f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setPadding(0, 0, 0, padV / 2)
+                    container.addView(this)
+                }
+            }
+            if (text.isNotBlank()) {
+                android.widget.TextView(this).apply {
+                    this.text = text
+                    setTextColor(android.graphics.Color.WHITE)
+                    textSize = 20f
+                    setLineSpacing(0f, 1.3f)
+                    container.addView(this)
+                }
+            }
+            images.forEach { url ->
+                android.widget.ImageView(this).apply {
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        (240 * density).toInt(),
+                    )
+                    lp.topMargin = padV
+                    layoutParams = lp
+                    scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    adjustViewBounds = true
+                    isFocusable = true
+                    isClickable = true
+                    blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
+                    setOnClickListener { showFullImage(url) }
+                    container.addView(this)
+                }
             }
         }
-        // 正文
-        if (item.text.isNotBlank()) {
-            android.widget.TextView(this).apply {
-                text = item.text
-                setTextColor(android.graphics.Color.WHITE)
-                textSize = 20f
-                setLineSpacing(0f, 1.3f)
-                container.addView(this)
-            }
-        }
-        // 图片
-        item.images.forEach { url ->
-            android.widget.ImageView(this).apply {
-                val lp = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    (240 * density).toInt(),
-                )
-                lp.topMargin = padV
-                layoutParams = lp
-                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                adjustViewBounds = true
-                isFocusable = true
-                isClickable = true
-                blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
-                setOnClickListener { showFullImage(url) }
-                container.addView(this)
-            }
-        }
+
+        // 先渲染列表里已有的内容
+        renderContent(item.title, item.text, item.images)
+
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
         }
@@ -1693,6 +1698,20 @@ class UpDetailActivity : BaseActivity() {
                 android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         scroll.addView(outer)
+
+        // 异步拉完整详情
+        lifecycleScope.launch {
+            runCatching {
+                BiliApi.dynamicDetail(item.dynId)
+            }.onSuccess { (fullText, fullImages) ->
+                if (fullText.isNotBlank() || fullImages.isNotEmpty()) {
+                    val finalText = if (fullText.isNotBlank()) fullText else item.text
+                    val finalImages = if (fullImages.isNotEmpty()) fullImages else item.images
+                    runOnUiThread { renderContent(item.title, finalText, finalImages) }
+                }
+            }
+        }
+
         AppPopup.custom(
             context = this,
             title = "动态详情",

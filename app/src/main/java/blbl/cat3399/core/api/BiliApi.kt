@@ -2080,6 +2080,34 @@ object BiliApi {
         return UpDynamicPage(cards, nextOffset)
     }
 
+    /** 动态详情：拉完整正文和全部图片。返回 (fullText, allImages) */
+    suspend fun dynamicDetail(dynId: String): Pair<String, List<String>> {
+        val url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=$dynId&features=itemOpusStyle,opusBigCover"
+        val json = BiliClient.getJson(url)
+        val item = json.optJSONObject("data")?.optJSONObject("item")
+            ?: return "" to emptyList()
+        val modules = item.optJSONObject("modules")
+        val desc = modules?.optJSONObject("module_dynamic")?.optJSONObject("desc")
+        val fullText = desc?.optString("text", "") ?: ""
+        val images = mutableListOf<String>()
+        val major = modules?.optJSONObject("module_dynamic")?.optJSONObject("major")
+        // opus 全部图片
+        major?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
+            for (k in 0 until arr.length()) {
+                val u = arr.optJSONObject(k)?.optString("url", "")
+                if (!u.isNullOrBlank()) images.add(u)
+            }
+        }
+        // draw 全部图片
+        major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
+            for (k in 0 until arr.length()) {
+                val u = arr.optJSONObject(k)?.optString("src", "")
+                if (!u.isNullOrBlank()) images.add(u)
+            }
+        }
+        return fullText to images
+    }
+
     suspend fun spaceArcSearchPage(
         mid: Long,
         pn: Int = 1,
