@@ -41,7 +41,6 @@ import blbl.cat3399.core.ui.popup.AppPopup
 import blbl.cat3399.core.ui.popup.PopupModalSizing
 import blbl.cat3399.core.util.Format
 import blbl.cat3399.databinding.ActivityUpDetailBinding
-import blbl.cat3399.databinding.IncludeVideoCommentImageViewerContentBinding
 import blbl.cat3399.databinding.IncludeVideoCommentsPanelContentBinding
 import blbl.cat3399.databinding.ViewVideoCommentsPopupBinding
 import blbl.cat3399.feature.login.QrLoginActivity
@@ -54,8 +53,6 @@ import blbl.cat3399.feature.video.VideoCardDismissBehavior
 import blbl.cat3399.feature.video.VideoCardVisibilityFilter
 import blbl.cat3399.feature.video.buildPagedVideoCardPlaybackHandle
 import blbl.cat3399.feature.video.buildVideoCardPlaybackHandle
-import blbl.cat3399.feature.video.comment.VideoCommentImageViewerController
-import blbl.cat3399.feature.video.comment.VideoCommentImageViewerViews
 import blbl.cat3399.feature.video.comment.VideoCommentsPanelController
 import blbl.cat3399.feature.video.comment.VideoCommentsPanelViews
 import blbl.cat3399.feature.video.defaultVideoCardPlaylistItem
@@ -2007,7 +2004,6 @@ class UpDetailActivity : BaseActivity() {
             return
         }
         var controller: VideoCommentsPanelController? = null
-        var commentImageViewer: VideoCommentImageViewerController? = null
         AppPopup.custom(
             context = this,
             title = "动态评论",
@@ -2028,27 +2024,11 @@ class UpDetailActivity : BaseActivity() {
             onDismiss = {
                 controller?.release()
                 controller = null
-                commentImageViewer = null
             },
             onBackPressed = { controller?.handleBack() == true },
             content = { dialogCtx ->
                 val b = ViewVideoCommentsPopupBinding.inflate(android.view.LayoutInflater.from(dialogCtx))
                 val cv = IncludeVideoCommentsPanelContentBinding.bind(b.commentsPopupContent)
-                // 动态评论区也要能看大图，否则评论里的图片点了没反应
-                val imageViews =
-                    IncludeVideoCommentImageViewerContentBinding.bind(b.commentImageViewer.getChildAt(0))
-                commentImageViewer =
-                    VideoCommentImageViewerController(
-                        views =
-                            VideoCommentImageViewerViews(
-                                container = b.commentImageViewer,
-                                image = imageViews.ivCommentImage,
-                                previous = imageViews.ivCommentImagePrev,
-                                next = imageViews.ivCommentImageNext,
-                            ),
-                        currentFocusProvider = { b.root.findFocus() },
-                        fallbackFocusProvider = { cv.recyclerComments },
-                    )
                 controller = VideoCommentsPanelController(
                     context = this,
                     scope = lifecycleScope,
@@ -2062,11 +2042,18 @@ class UpDetailActivity : BaseActivity() {
                     ),
                     oidProvider = { oid },
                     upMidProvider = { mid },
-                    imageViewer = commentImageViewer,
+                    imageViewer = null,
                     isActive = { true },
                     commentType = item.commentType,
                     // 动态评论区用独立字号，不占用视频评论区设置
                     textSizeSpOverride = BiliClient.prefs.dynamicCommentTextSizeSp,
+                    // 评论图片改用全屏 Dialog 看图，方向键不会漏到后面的评论列表
+                    onPictureOverride = { picItem, idx ->
+                        val url = picItem.pictures.getOrNull(idx)?.url
+                        if (!url.isNullOrBlank()) {
+                            showFullImage(url, triggerView = window?.decorView?.findFocus())
+                        }
+                    },
                 )
                 b.root
             },

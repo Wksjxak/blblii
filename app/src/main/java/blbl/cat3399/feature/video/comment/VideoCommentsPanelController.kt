@@ -40,6 +40,8 @@ internal class VideoCommentsPanelController(
     private val commentType: Int = VIDEO_COMMENT_TYPE_ARCHIVE,
     /** 评论字号覆写；动态评论区传入自己的字号，null 时沿用视频评论全局字号 */
     private val textSizeSpOverride: Float? = null,
+    /** 图片查看覆写：动态评论区用全屏 Dialog 看图，避免弹窗内覆盖层漏键 */
+    private val onPictureOverride: ((VideoCommentItem, Int) -> Unit)? = null,
 ) {
     private val dataSource = VideoCommentDataSource(upMidProvider, commentType)
     private var commentSort: Int = VIDEO_COMMENT_SORT_HOT
@@ -385,6 +387,10 @@ internal class VideoCommentsPanelController(
         startIndex: Int,
         requireThreadVisible: Boolean,
     ) {
+        if (onPictureOverride != null && item.pictures.isNotEmpty()) {
+            onPictureOverride.invoke(item, startIndex)
+            return
+        }
         val viewer = imageViewer ?: return
         if (item.pictures.isNotEmpty()) {
             viewer.open(pictures = item.pictures, startIndex = startIndex)
