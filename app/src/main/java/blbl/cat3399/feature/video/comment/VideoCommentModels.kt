@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 internal const val VIDEO_COMMENT_TYPE_ARCHIVE = 1
+internal const val VIDEO_COMMENT_TYPE_DYNAMIC = 17
 internal const val VIDEO_COMMENT_SORT_NEW = 0
 internal const val VIDEO_COMMENT_SORT_HOT = 1
 

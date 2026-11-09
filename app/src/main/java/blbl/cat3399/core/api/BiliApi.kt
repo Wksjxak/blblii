@@ -1851,12 +1851,15 @@ object BiliApi {
             }
 
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
-                val dynId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
+                val rawId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
                     "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
+                val dynOid = runCatching { it.optLong("id", 0L).takeIf { v -> v > 0L }
+                    ?: it.optString("id_str", "").toLongOrNull() }.getOrNull()
                 cards.add(
                     DynamicFeedItem.Rich(
-                        dynId = dynId,
+                        dynId = rawId,
+                        dynOid = dynOid,
                         text = text,
                         title = title,
                         images = images.take(3),

@@ -19,6 +19,7 @@ internal data class VideoCommentThreadPage(
 
 internal class VideoCommentDataSource(
     private val upMidProvider: () -> Long,
+    private val commentType: Int = VIDEO_COMMENT_TYPE_ARCHIVE,
 ) {
     suspend fun loadRootPage(
         oid: Long,
@@ -29,7 +30,7 @@ internal class VideoCommentDataSource(
         val data =
             withContext(Dispatchers.IO) {
                 BiliApi.commentPage(
-                    type = VIDEO_COMMENT_TYPE_ARCHIVE,
+                    type = commentType,
                     oid = oid,
                     sort = sort,
                     pn = page,
@@ -58,7 +59,7 @@ internal class VideoCommentDataSource(
         val data =
             withContext(Dispatchers.IO) {
                 BiliApi.commentRepliesPage(
-                    type = VIDEO_COMMENT_TYPE_ARCHIVE,
+                    type = commentType,
                     oid = oid,
                     rootRpid = rootRpid,
                     pn = page,

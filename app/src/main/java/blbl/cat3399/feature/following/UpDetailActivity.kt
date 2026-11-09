@@ -35,8 +35,12 @@ import blbl.cat3399.core.ui.ThemeColor
 import blbl.cat3399.core.ui.cloneInUserScale
 import blbl.cat3399.core.ui.enableDpadTabFocus
 import blbl.cat3399.core.ui.postIfAlive
+import blbl.cat3399.core.ui.popup.AppPopup
+import blbl.cat3399.core.ui.popup.PopupModalSizing
 import blbl.cat3399.core.util.Format
 import blbl.cat3399.databinding.ActivityUpDetailBinding
+import blbl.cat3399.databinding.IncludeVideoCommentsPanelContentBinding
+import blbl.cat3399.databinding.ViewVideoCommentsPopupBinding
 import blbl.cat3399.feature.login.QrLoginActivity
 import blbl.cat3399.feature.player.PlayerPlaylistContinuation
 import blbl.cat3399.feature.player.VideoCardPlaylistPage
@@ -47,6 +51,8 @@ import blbl.cat3399.feature.video.VideoCardDismissBehavior
 import blbl.cat3399.feature.video.VideoCardVisibilityFilter
 import blbl.cat3399.feature.video.buildPagedVideoCardPlaybackHandle
 import blbl.cat3399.feature.video.buildVideoCardPlaybackHandle
+import blbl.cat3399.feature.video.comment.VideoCommentsPanelController
+import blbl.cat3399.feature.video.comment.VideoCommentsPanelViews
 import blbl.cat3399.feature.video.defaultVideoCardPlaylistItem
 import blbl.cat3399.feature.video.openVideoDetailFromPlaybackHandle
 import blbl.cat3399.feature.video.openVideoFromPlaybackHandle
@@ -380,10 +386,7 @@ class UpDetailActivity : BaseActivity() {
                     )
                 },
                 onRichClick = { item ->
-                    val url = "https://www.bilibili.com/opus/${item.dynId}"
-                    runCatching {
-                        startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setData(android.net.Uri.parse(url)))
-                    }
+                    openDynamicComments(item)
                 },
             )
 
@@ -1612,6 +1615,61 @@ class UpDetailActivity : BaseActivity() {
                 canAdvance = page.hasMore && page.items.isNotEmpty(),
             )
         }
+
+    private fun openDynamicComments(item: DynamicFeedItem.Rich) {
+        val oid = item.dynOid
+        if (oid == null || oid <= 0L) {
+            AppToast.show(this, "该动态暂无评论入口")
+            return
+        }
+        var controller: VideoCommentsPanelController? = null
+        AppPopup.custom(
+            context = this,
+            title = "动态评论",
+            cancelable = true,
+            actions = emptyList(),
+            preferredActionRole = null,
+            autoFocus = false,
+            modalSizing = PopupModalSizing(
+                widthRatio = 0.86f,
+                maxWidthDp = 1120f,
+                maxHeightRatio = 0.90f,
+            ),
+            onModalAttached = {
+                controller?.showRoot()
+                controller?.ensureLoaded()
+                controller?.focusRoot()
+            },
+            onDismiss = {
+                controller?.release()
+                controller = null
+            },
+            onBackPressed = { controller?.handleBack() == true },
+            content = { dialogCtx ->
+                val b = ViewVideoCommentsPopupBinding.inflate(android.view.LayoutInflater.from(dialogCtx))
+                val cv = IncludeVideoCommentsPanelContentBinding.bind(b.commentsPopupContent)
+                b.commentImageViewer.visibility = android.view.View.GONE
+                controller = VideoCommentsPanelController(
+                    context = this,
+                    scope = lifecycleScope,
+                    views = VideoCommentsPanelViews(
+                        sortRow = cv.rowCommentSort,
+                        sortHot = cv.chipCommentSortHot,
+                        sortNew = cv.chipCommentSortNew,
+                        comments = cv.recyclerComments,
+                        thread = cv.recyclerCommentThread,
+                        hint = cv.tvCommentsHint,
+                    ),
+                    oidProvider = { oid },
+                    upMidProvider = { mid },
+                    imageViewer = null,
+                    isActive = { true },
+                    commentType = blbl.cat3399.feature.video.comment.VIDEO_COMMENT_TYPE_DYNAMIC,
+                )
+                b.root
+            },
+        )
+    }
 
     private fun dynamicPlaybackHandle() =
         buildPagedVideoCardPlaybackHandle<String?>(

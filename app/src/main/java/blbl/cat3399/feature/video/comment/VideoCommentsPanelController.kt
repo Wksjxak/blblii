@@ -37,8 +37,9 @@ internal class VideoCommentsPanelController(
     private val upMidProvider: () -> Long,
     private val imageViewer: VideoCommentImageViewerController?,
     private val isActive: () -> Boolean,
+    private val commentType: Int = VIDEO_COMMENT_TYPE_ARCHIVE,
 ) {
-    private val dataSource = VideoCommentDataSource(upMidProvider)
+    private val dataSource = VideoCommentDataSource(upMidProvider, commentType)
     private var commentSort: Int = VIDEO_COMMENT_SORT_HOT
     private var commentsFetchJob: Job? = null
     private var commentsFetchToken: Int = 0
