@@ -2148,6 +2148,19 @@ object BiliApi {
             fullText.append(desc?.optString("text", "") ?: "")
         }
 
+        // 用 /detail/pic 接口拿全部图片（更可靠）
+        runCatching {
+            val picJson = BiliClient.getJson("https://api.bilibili.com/x/polymer/web-dynamic/v1/detail/pic?id=$dynId")
+            val picArr = picJson.optJSONArray("data")
+            if (picArr != null && picArr.length() > 0) {
+                images.clear()
+                for (i in 0 until picArr.length()) {
+                    val u = picArr.optJSONObject(i)?.optString("src", "")
+                    if (!u.isNullOrBlank()) images.add(u)
+                }
+            }
+        }
+
         return fullText.toString() to images
     }
 
