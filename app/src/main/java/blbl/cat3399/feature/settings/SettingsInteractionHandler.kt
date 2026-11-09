@@ -1496,7 +1496,7 @@ class SettingsInteractionHandler(
             }
 
             SettingId.DynamicDetailTextSize -> {
-                val options = listOf(16, 18, 20, 22, 24, 26, 28, 30)
+                val options = listOf(14, 16, 18, 20, 22, 24, 26, 28, 30, 34, 38, 44)
                 showChoiceDialog(
                     title = "动态详情正文字号(sp)",
                     items = options.map { "${it}sp" },
@@ -1504,6 +1504,32 @@ class SettingsInteractionHandler(
                 ) { selected ->
                     val size = selected.removeSuffix("sp").toIntOrNull() ?: 20
                     prefs.dynamicDetailTextSize = size.toFloat()
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
+            SettingId.DynamicCommentTextSize -> {
+                val options = listOf(10, 12, 14, 16, 18, 20, 24, 28, 32, 40)
+                showChoiceDialog(
+                    title = "动态评论字号(sp)",
+                    items = options.map { "${it}sp" },
+                    current = "${prefs.dynamicCommentTextSizeSp.toInt()}sp",
+                ) { selected ->
+                    val size = selected.removeSuffix("sp").toIntOrNull() ?: 14
+                    prefs.dynamicCommentTextSizeSp = size.toFloat()
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
+            SettingId.DynamicDetailFocusGroup -> {
+                val options = listOf(1, 2, 3, 4, 5)
+                showChoiceDialog(
+                    title = "正文焦点分块段数",
+                    items = options.map { "$it 段 / 块" },
+                    current = "${prefs.dynamicDetailFocusGroup} 段 / 块",
+                ) { selected ->
+                    val n = selected.substringBefore(" 段").trim().toIntOrNull() ?: 1
+                    prefs.dynamicDetailFocusGroup = n
                     renderer.refreshSection(entry.id)
                 }
             }

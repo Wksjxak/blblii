@@ -1904,11 +1904,13 @@ object BiliApi {
                 var origText: String? = null
                 var origCover: String? = null
                 var origDynId: String? = null
-                val orig = moduleDynamic.optJSONObject("orig")
+                val orig = moduleDynamic.optJSONObject("orig") ?: it.optJSONObject("orig")
                 if (orig != null) {
                     origDynId = orig.optString("id_str", "").trim().ifBlank { null }
                         ?: orig.optJSONObject("basic")?.optString("id_str", "")?.trim()?.ifBlank { null }
                         ?: orig.optString("id", "").trim().ifBlank { null }
+                        ?: orig.optJSONObject("modules")?.optJSONObject("module_dynamic")
+                            ?.optJSONObject("desc")?.optString("dyn_id_str", "")?.trim()?.ifBlank { null }
                     val origModules = orig.optJSONObject("modules")
                     origModules?.optJSONObject("module_author")?.let {
                         origAuthor = it.optString("name", "").trim().ifBlank { null }
@@ -2228,63 +2230,99 @@ object BiliApi {
         return paras
     }
 
-    /** 从 item 里找正文段落，兼容 modules 为数组（opus/detail）和对象（feed/detail）两种形态 */
+    /** 从 item 里找正文段落，兼容 modules 为数组（opus/detail）和对象（feed/detail）两种形态，并展开转发的原动态 */
     private fun extractParagraphsFromItem(item: JSONObject): List<DynamicParagraph> {
+        val out = ArrayList<DynamicParagraph>()
         val modulesNode = item.opt("modules")
+        var moduleDynamic: JSONObject? = null
 
-        // opus/detail: modules 是数组，正文在 MODULE_TYPE_CONTENT
+        fun collectFromContentModule(m: JSONObject) {
+            val mc = m.optJSONObject("module_content") ?: return
+            val pars = mc.optJSONArray("paragraphs") ?: return
+            out.addAll(parseOpusParagraphs(pars))
+        }
+
+        fun collectFromDynamic(md: JSONObject) {
+            if (out.isNotEmpty()) return
+            val pars = md.optJSONObject("module_content")?.optJSONArray("paragraphs")
+                ?: md.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("paragraphs")
+            if (pars != null && pars.length() > 0) {
+                out.addAll(parseOpusParagraphs(pars))
+                return
+            }
+            val descText = md.optJSONObject("desc")?.optString("text", "").orEmpty()
+            if (descText.isNotBlank()) out.add(DynamicParagraph.Text(descText))
+            val major = md.optJSONObject("major")
+            major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
+                for (k in 0 until arr.length()) {
+                    val u = arr.optJSONObject(k)?.optString("src", "").orEmpty()
+                    if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                }
+            }
+            if (out.none { it is DynamicParagraph.Image }) {
+                major?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
+                    for (k in 0 until arr.length()) {
+                        val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
+                        if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                    }
+                }
+            }
+        }
+
         if (modulesNode is JSONArray) {
             for (i in 0 until modulesNode.length()) {
                 val m = modulesNode.optJSONObject(i) ?: continue
-                val mc = m.optJSONObject("module_content") ?: continue
-                val pars = mc.optJSONArray("paragraphs") ?: continue
-                val out = parseOpusParagraphs(pars)
-                if (out.isNotEmpty()) return out
+                collectFromContentModule(m)
+                m.optJSONObject("module_dynamic")?.let { moduleDynamic = it }
             }
+        } else if (modulesNode is JSONObject) {
+            collectFromContentModule(modulesNode)
+            moduleDynamic = modulesNode.optJSONObject("module_dynamic")
         }
 
-        // feed/detail: modules 是对象
-        if (modulesNode is JSONObject) {
-            // 可能直接是 module_content
-            modulesNode.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
-                val out = parseOpusParagraphs(pars)
-                if (out.isNotEmpty()) return out
-            }
-            val moduleDynamic = modulesNode.optJSONObject("module_dynamic")
-            if (moduleDynamic != null) {
-                moduleDynamic.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
-                    val out = parseOpusParagraphs(pars)
-                    if (out.isNotEmpty()) return out
-                }
-                val major = moduleDynamic.optJSONObject("major")
-                val opus = major?.optJSONObject("opus")
-                opus?.optJSONArray("paragraphs")?.let { pars ->
-                    val out = parseOpusParagraphs(pars)
-                    if (out.isNotEmpty()) return out
-                }
+        moduleDynamic?.let { collectFromDynamic(it) }
 
-                // 兜底：desc.text + draw/opus 图片
-                val fallback = ArrayList<DynamicParagraph>()
-                val descText = moduleDynamic.optJSONObject("desc")?.optString("text", "").orEmpty()
-                if (descText.isNotBlank()) fallback.add(DynamicParagraph.Text(descText))
-                major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
+        // 转发：原动态在 module_dynamic.orig 或 item.orig
+        val orig = moduleDynamic?.optJSONObject("orig") ?: item.optJSONObject("orig")
+        if (orig != null) {
+            val origModules = orig.optJSONObject("modules")
+            val author = origModules?.optJSONObject("module_author")?.optString("name", "").orEmpty()
+            out.add(DynamicParagraph.Separator)
+            out.add(
+                DynamicParagraph.Text(
+                    if (author.isBlank()) "转发动态" else "转发自 @$author",
+                    isHeading = true,
+                ),
+            )
+            val origDynamic = origModules?.optJSONObject("module_dynamic") ?: orig.optJSONObject("module_dynamic")
+            val origPars = origDynamic?.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("paragraphs")
+            if (origPars != null && origPars.length() > 0) {
+                out.addAll(parseOpusParagraphs(origPars))
+            } else {
+                val oTitle = origDynamic?.optJSONObject("major")?.optString("title", "").orEmpty()
+                if (oTitle.isNotBlank()) out.add(DynamicParagraph.Text(oTitle, isHeading = true))
+                val oDesc = origDynamic?.optJSONObject("desc")?.optString("text", "").orEmpty()
+                if (oDesc.isNotBlank()) out.add(DynamicParagraph.Text(oDesc))
+                origDynamic?.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
                     for (k in 0 until arr.length()) {
-                        val u = arr.optJSONObject(k)?.optString("src", "").orEmpty()
-                        if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
+                        val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
+                        if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
                     }
                 }
-                if (fallback.none { it is DynamicParagraph.Image }) {
-                    opus?.optJSONArray("pics")?.let { arr ->
-                        for (k in 0 until arr.length()) {
-                            val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
-                            if (u.isNotBlank()) fallback.add(DynamicParagraph.Image(u))
-                        }
-                    }
-                }
-                return fallback
             }
         }
-        return emptyList()
+
+        // 诊断：内容异常少时把结构打出来，便于下一轮定位（不改行为）
+        if (out.size <= 2) {
+            val mdKeys = moduleDynamic?.keys()?.asSequence()?.joinToString(",").orEmpty()
+            val itemKeys = item.keys().asSequence().joinToString(",")
+            AppLog.w(
+                TAG,
+                "detailTooShort keys=[$itemKeys] module_dynamic=$mdKeys " +
+                    "orig=${if (orig != null) "yes" else "no"} paras=${out.size}",
+            )
+        }
+        return out
     }
 
     suspend fun spaceArcSearchPage(

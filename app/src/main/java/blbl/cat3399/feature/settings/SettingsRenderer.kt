@@ -481,6 +481,18 @@ class SettingsRenderer(
                     SettingEntry(SettingId.PlayerOpenDetailBeforePlay, "播放前打开详情页", if (prefs.playerOpenDetailBeforePlay) "开" else "关", null),
                     SettingEntry(SettingId.UpDynamicShowVideo, "UP动态栏显示投稿视频", if (prefs.upDynamicShowVideo) "开" else "关", null),
                     SettingEntry(SettingId.DynamicDetailTextSize, "动态详情字号", prefs.dynamicDetailTextSize.toInt().toString() + "sp", null),
+                    SettingEntry(
+                        SettingId.DynamicCommentTextSize,
+                        "动态评论字号",
+                        prefs.dynamicCommentTextSizeSp.toInt().toString() + "sp",
+                        "只作用于动态评论区，不影响视频评论区字号",
+                    ),
+                    SettingEntry(
+                        SettingId.DynamicDetailFocusGroup,
+                        "正文焦点分块段数",
+                        "${prefs.dynamicDetailFocusGroup} 段 / 块",
+                        "TV 遥控器上下键每跳一个焦点块；1 段即逐段聚焦",
+                    ),
                     SettingEntry(SettingId.PlayerPlaybackMode, "播放模式", SettingsText.playbackModeText(prefs.playerPlaybackMode), null),
                     SettingEntry(SettingId.SubtitlePreferredLang, "字幕语言", SettingsText.subtitleLangText(prefs.subtitlePreferredLang), null),
                     SettingEntry(SettingId.SubtitleTextSizeSp, "字幕字体大小", prefs.subtitleTextSizeSp.toInt().toString(), null),

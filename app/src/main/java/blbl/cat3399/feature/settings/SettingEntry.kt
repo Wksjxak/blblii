@@ -70,6 +70,8 @@ enum class SettingId(
     PlayerOpenDetailBeforePlay("player_open_detail_before_play"),
     UpDynamicShowVideo("up_dynamic_show_video"),
     DynamicDetailTextSize("dynamic_detail_text_size"),
+    DynamicCommentTextSize("dynamic_comment_text_size"),
+    DynamicDetailFocusGroup("dynamic_detail_focus_group"),
     PlayerPlaybackMode("player_playback_mode"),
     PlayerUpQuickCardEnabled("player_up_quick_card_enabled"),
     PlayerStyle("player_style"),

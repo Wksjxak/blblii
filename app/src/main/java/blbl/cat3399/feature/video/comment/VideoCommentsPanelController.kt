@@ -38,6 +38,8 @@ internal class VideoCommentsPanelController(
     private val imageViewer: VideoCommentImageViewerController?,
     private val isActive: () -> Boolean,
     private val commentType: Int = VIDEO_COMMENT_TYPE_ARCHIVE,
+    /** 评论字号覆写；动态评论区传入自己的字号，null 时沿用视频评论全局字号 */
+    private val textSizeSpOverride: Float? = null,
 ) {
     private val dataSource = VideoCommentDataSource(upMidProvider, commentType)
     private var commentSort: Int = VIDEO_COMMENT_SORT_HOT
@@ -193,6 +195,7 @@ internal class VideoCommentsPanelController(
                 onTouchClick = { item -> onRootCommentTouchClick(item) },
                 onPictureClick = { item, index -> openItemPictures(item, index, requireThreadVisible = false) },
                 onLongClick = { item -> onRootCommentLongClick(item) },
+                textSizeSpOverride = textSizeSpOverride,
             )
         views.comments.adapter = commentsAdapter
         views.comments.layoutManager = LinearLayoutManager(context)
@@ -243,6 +246,7 @@ internal class VideoCommentsPanelController(
                 expandedRpids = expandedRpids,
                 onClick = { item -> onThreadCommentClick(item) },
                 onPictureClick = { item, index -> openItemPictures(item, index, requireThreadVisible = true) },
+                textSizeSpOverride = textSizeSpOverride,
             )
         views.thread.adapter = threadAdapter
         views.thread.layoutManager = LinearLayoutManager(context)

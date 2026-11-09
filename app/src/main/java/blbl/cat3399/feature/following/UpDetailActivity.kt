@@ -1733,6 +1733,57 @@ class UpDetailActivity : BaseActivity() {
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
         )
 
+        // 一段正文的视图工厂（不带焦点属性，焦点由外层块管理）
+        fun makeParaView(target: android.widget.LinearLayout, para: DynamicParagraph, focusable: Boolean) {
+            when (para) {
+                is DynamicParagraph.Text -> {
+                    val tv = android.widget.TextView(this)
+                    tv.text = para.text
+                    tv.setTextColor(if (para.isHeading) 0xFF9FD6FF.toInt() else android.graphics.Color.WHITE)
+                    tv.textSize = if (para.isHeading) {
+                        BiliClient.prefs.dynamicDetailTextSize + 2f
+                    } else {
+                        BiliClient.prefs.dynamicDetailTextSize
+                    }
+                    if (para.isHeading) tv.setTypeface(tv.typeface, android.graphics.Typeface.BOLD)
+                    tv.setLineSpacing(0f, 1.3f)
+                    tv.setPadding(padV / 3, padV / 4, padV / 3, padV / 4)
+                    tv.isFocusable = focusable
+                    tv.isFocusableInTouchMode = false
+                    target.addView(tv, android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ))
+                }
+                is DynamicParagraph.Image -> {
+                    val iv = android.widget.ImageView(this)
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        (240 * density).toInt(),
+                    )
+                    lp.topMargin = padV
+                    iv.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    iv.isFocusable = focusable
+                    iv.isClickable = true
+                    blbl.cat3399.core.image.ImageLoader.loadInto(iv, para.url)
+                    iv.setOnClickListener { showFullImage(para.url, triggerView = iv) }
+                    target.addView(iv, lp)
+                }
+                DynamicParagraph.Separator -> {
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        (1 * density).toInt(),
+                    )
+                    lp.topMargin = padV / 2
+                    lp.bottomMargin = padV / 2
+                    val line = android.view.View(this)
+                    line.setBackgroundColor(0x33FFFFFF)
+                    line.isFocusable = false
+                    target.addView(line, lp)
+                }
+            }
+        }
+
         fun renderParagraphs(title: String?, paragraphs: List<DynamicParagraph>) {
             container.removeAllViews()
             if (!title.isNullOrBlank()) {
@@ -1745,56 +1796,69 @@ class UpDetailActivity : BaseActivity() {
                     container.addView(this, fullWidthLp)
                 }
             }
+
+            // 焦点分块：N 段合成一个焦点块（N=1 即逐段聚焦）
+            val groupSize = BiliClient.prefs.dynamicDetailFocusGroup.coerceIn(1, 5)
+            val blocks = ArrayList<MutableList<DynamicParagraph>>()
+            var current = ArrayList<DynamicParagraph>()
+            var contentCount = 0
             paragraphs.forEach { para ->
-                when (para) {
-                    is DynamicParagraph.Text -> {
-                        android.widget.TextView(this).apply {
-                            this.text = para.text
-                            setTextColor(if (para.isHeading) 0xFF9FD6FF.toInt() else android.graphics.Color.WHITE)
-                            textSize = if (para.isHeading) {
-                                BiliClient.prefs.dynamicDetailTextSize + 2f
-                            } else {
-                                BiliClient.prefs.dynamicDetailTextSize
-                            }
-                            if (para.isHeading) setTypeface(typeface, android.graphics.Typeface.BOLD)
-                            setLineSpacing(0f, 1.3f)
-                            setPadding(padV / 3, padV / 4, padV / 3, padV / 4)
-                            // TV：每段都是一个焦点落点，焦点走到哪正文就滚到哪
-                            isFocusable = true
-                            isFocusableInTouchMode = false
-                            background = paragraphFocusBg()
-                            container.addView(this, fullWidthLp)
-                        }
-                    }
-                    is DynamicParagraph.Image -> {
-                        android.widget.ImageView(this).apply {
-                            val lp = android.widget.LinearLayout.LayoutParams(
-                                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                                (240 * density).toInt(),
-                            )
-                            lp.topMargin = padV
-                            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                            isFocusable = true
-                            isClickable = true
-                            background = paragraphFocusBg()
-                            blbl.cat3399.core.image.ImageLoader.loadInto(this, para.url)
-                            setOnClickListener { showFullImage(para.url, triggerView = this) }
-                            container.addView(this, lp)
-                        }
-                    }
-                    DynamicParagraph.Separator -> {
-                        android.view.View(this).apply {
-                            val lp = android.widget.LinearLayout.LayoutParams(
-                                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                                (1 * density).toInt(),
-                            )
-                            lp.topMargin = padV / 2
-                            lp.bottomMargin = padV / 2
-                            setBackgroundColor(0x33FFFFFF)
-                            container.addView(this, lp)
-                        }
-                    }
+                current.add(para)
+                if (para is DynamicParagraph.Separator) return@forEach
+                contentCount++
+                if (contentCount >= groupSize) {
+                    blocks.add(current)
+                    current = ArrayList()
+                    contentCount = 0
                 }
+            }
+            if (current.isNotEmpty()) blocks.add(current)
+
+            blocks.forEach { block ->
+                val contentParas = block.filter { it !is DynamicParagraph.Separator }
+                if (contentParas.isEmpty()) {
+                    block.forEach { makeParaView(container, it, focusable = false) }
+                    return@forEach
+                }
+                val single = contentParas.size == 1 && groupSize == 1
+
+                if (single) {
+                    // 单段块：段落自己就是焦点落点，保持逐段体验
+                    val holder = android.widget.LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.VERTICAL
+                    }
+                    val focusPara = contentParas.first()
+                    block.forEach { para ->
+                        val isTarget = para === focusPara
+                        makeParaView(holder, para, focusable = isTarget)
+                        if (isTarget) {
+                            holder.getChildAt(holder.childCount - 1)?.background = paragraphFocusBg()
+                        }
+                    }
+                    container.addView(holder, android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ))
+                    return@forEach
+                }
+
+                // 多段块：整块可聚焦，内部段落不再抢焦点
+                val card = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    isFocusable = true
+                    isFocusableInTouchMode = false
+                    background = paragraphFocusBg()
+                }
+                block.forEach { para -> makeParaView(card, para, focusable = false) }
+                val firstImage = contentParas.filterIsInstance<DynamicParagraph.Image>().firstOrNull()
+                if (firstImage != null) {
+                    card.isClickable = true
+                    card.setOnClickListener { showFullImage(firstImage.url, triggerView = card) }
+                }
+                container.addView(card, android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                ))
             }
         }
 
@@ -1973,6 +2037,8 @@ class UpDetailActivity : BaseActivity() {
                     imageViewer = null,
                     isActive = { true },
                     commentType = item.commentType,
+                    // 动态评论区用独立字号，不占用视频评论区设置
+                    textSizeSpOverride = BiliClient.prefs.dynamicCommentTextSizeSp,
                 )
                 b.root
             },

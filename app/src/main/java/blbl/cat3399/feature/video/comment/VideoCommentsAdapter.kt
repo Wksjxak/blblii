@@ -28,6 +28,8 @@ internal class VideoCommentsAdapter(
     private val onTouchClick: (VideoCommentItem) -> Unit = {},
     private val onPictureClick: (VideoCommentItem, Int) -> Unit,
     private val onLongClick: (VideoCommentItem) -> Boolean = { false },
+    /** 字号覆写：动态评论区用它自己的字号，不影响视频评论区全局设置 */
+    private val textSizeSpOverride: Float? = null,
 ) : RecyclerView.Adapter<VideoCommentsAdapter.Vh>() {
     private val items = ArrayList<VideoCommentItem>()
     private val requestedNotePictures = HashSet<Long>()
@@ -155,7 +157,7 @@ internal class VideoCommentsAdapter(
             // Explicitly toggle ellipsize so a recycled TextView doesn't keep a stale
             // ellipsized layout after maxLines changes.
             binding.tvMessage.ellipsize = if (isExpanded) null else TextUtils.TruncateAt.END
-            val commentTextSize = BiliClient.prefs.commentTextSizeSp
+            val commentTextSize = textSizeSpOverride ?: BiliClient.prefs.commentTextSizeSp
             binding.tvMessage.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, commentTextSize)
             val blankFallback = if (item.pictures.isNotEmpty() || item.noteCvid > 0L) "" else "-"
             EmoteSpannable.setText(binding.tvMessage, item.message, item.emotes, blankFallback = blankFallback)

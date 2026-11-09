@@ -759,8 +759,23 @@ class AppPrefs(context: Context) {
 
     /** 动态详情正文字号（sp），默认 20。 */
     var dynamicDetailTextSize: Float
-        get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f)
-        set(value) = prefs.edit().putFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, value).apply()
+        get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f).coerceIn(DYNAMIC_DETAIL_TEXT_SIZE_MIN, DYNAMIC_DETAIL_TEXT_SIZE_MAX)
+        set(value) = prefs.edit()
+            .putFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, value.coerceIn(DYNAMIC_DETAIL_TEXT_SIZE_MIN, DYNAMIC_DETAIL_TEXT_SIZE_MAX))
+            .apply()
+
+    /** 动态评论区独立字号（sp），与视频评论区字号分开存，默认 14，范围 10..40。 */
+    var dynamicCommentTextSizeSp: Float
+        get() = prefs.getFloat(KEY_DYNAMIC_COMMENT_TEXT_SIZE_SP, COMMENT_TEXT_SIZE_SP_DEFAULT)
+            .coerceIn(COMMENT_TEXT_SIZE_SP_MIN, COMMENT_TEXT_SIZE_SP_MAX)
+        set(value) = prefs.edit()
+            .putFloat(KEY_DYNAMIC_COMMENT_TEXT_SIZE_SP, value.coerceIn(COMMENT_TEXT_SIZE_SP_MIN, COMMENT_TEXT_SIZE_SP_MAX))
+            .apply()
+
+    /** 动态详情正文焦点分块段数：1 = 逐段聚焦，2..5 = 每 N 段合为一个焦点块。 */
+    var dynamicDetailFocusGroup: Int
+        get() = prefs.getInt(KEY_DYNAMIC_DETAIL_FOCUS_GROUP, 1).coerceIn(1, 5)
+        set(value) = prefs.edit().putInt(KEY_DYNAMIC_DETAIL_FOCUS_GROUP, value.coerceIn(1, 5)).apply()
 
     var fullscreenEnabled: Boolean
         get() = prefs.getBoolean(KEY_FULLSCREEN, true)
@@ -1222,6 +1237,9 @@ class AppPrefs(context: Context) {
         const val COMMENT_TEXT_SIZE_SP_DEFAULT = 14f
         const val COMMENT_TEXT_SIZE_SP_MIN = 10f
         const val COMMENT_TEXT_SIZE_SP_MAX = 40f
+        // 动态详情正文字号范围（比默认 20 更宽，方便放大小屏/远距离观看）
+        const val DYNAMIC_DETAIL_TEXT_SIZE_MIN = 14f
+        const val DYNAMIC_DETAIL_TEXT_SIZE_MAX = 44f
         const val DANMAKU_TEXT_SIZE_SP_DEFAULT = 18f
         const val DANMAKU_TEXT_SIZE_SP_MIN = 10f
         const val DANMAKU_TEXT_SIZE_SP_MAX = 60f
@@ -1351,6 +1369,8 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY = "player_open_detail_before_play"
         private const val KEY_UP_DYNAMIC_SHOW_VIDEO = "up_dynamic_show_video"
         private const val KEY_DYNAMIC_DETAIL_TEXT_SIZE = "dynamic_detail_text_size"
+        private const val KEY_DYNAMIC_COMMENT_TEXT_SIZE_SP = "dynamic_comment_text_size_sp"
+        private const val KEY_DYNAMIC_DETAIL_FOCUS_GROUP = "dynamic_detail_focus_group"
         private const val KEY_FULLSCREEN = "fullscreen_enabled"
         private const val KEY_AVOID_DISPLAY_CUTOUT = "avoid_display_cutout"
         private const val KEY_TAB_SWITCH_FOLLOWS_FOCUS = "tab_switch_follows_focus"
