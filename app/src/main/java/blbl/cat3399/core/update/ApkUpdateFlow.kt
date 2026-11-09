@@ -72,8 +72,12 @@ object ApkUpdateFlow {
                         }
                     },
                     PopupAction(role = PopupActionRole.POSITIVE, text = "立即更新") {
-                        // 翻看历史版本只是为了读说明，真装还是装最新的那个，避免装成旧版
-                        onUpdate(versions.first())
+                        runCatching {
+                            onUpdate(versions.first())
+                        }.onFailure { t ->
+                            AppLog.w("Update", "立即更新崩溃: ${t.message}", t)
+                            AppToast.showLong(activity, "启动更新失败：${t.message ?: "未知错误"}")
+                        }
                     },
                 ),
             preferredActionRole = PopupActionRole.POSITIVE,

@@ -46,12 +46,12 @@ object ApkUpdater {
     private const val GHFAST_PREFIX = "https://ghfast.top/"
     private const val GHPROXY_NET_PREFIX = "https://ghproxy.net/"
     /** API 检查用的线路：直连 + gh-proxy（ghfast/ghproxy.net 的 API 接口不可用，只用于下载）。 */
-    private val API_MIRRORS = listOf("", GH_PROXY_PREFIX)
+    private val API_MIRRORS = listOf(GH_PROXY_PREFIX, "")
     /** APK 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
     private val DOWNLOAD_MIRRORS =
-        listOf("", GH_PROXY_PREFIX, GHFAST_PREFIX, GHPROXY_NET_PREFIX)
+        listOf(GH_PROXY_PREFIX, GHFAST_PREFIX, GHPROXY_NET_PREFIX, "")
     private const val DOWNLOAD_CONNECTIONS = 6
-    private const val PROBE_BYTES = 256L * 1024L
+    private const val PROBE_BYTES = 64L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
     private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
     private const val CHANGELOG_PROXY_URL = GH_PROXY_PREFIX + "https://raw.githubusercontent.com/Wksjxak/blblii/master/CHANGELOG.md"
@@ -184,7 +184,7 @@ object ApkUpdater {
             if (BuildConfig.DEBUG) return@withContext fetchTestChannelUpdate()
 
             // 1) releases 列表：直连或走代理，过滤掉 pre-release，最新的在最前
-            for (base in listOf("", GH_PROXY_PREFIX)) {
+            for (base in listOf(GH_PROXY_PREFIX, "")) {
                 val list =
                     runCatching { retryFetch { fetchReleaseList(base, prerelease = false) } }
                         .getOrNull() ?: continue
