@@ -1495,6 +1495,19 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.DynamicDetailTextSize -> {
+                val options = listOf(16, 18, 20, 22, 24, 26, 28, 30)
+                showChoiceDialog(
+                    title = "动态详情正文字号(sp)",
+                    items = options.map { "${it}sp" },
+                    current = "${prefs.dynamicDetailTextSize.toInt()}sp",
+                ) { selected ->
+                    val size = selected.removeSuffix("sp").toIntOrNull() ?: 20
+                    prefs.dynamicDetailTextSize = size.toFloat()
+                    renderer.refreshSection(entry.id)
+                }
+            }
+
             SettingId.PlayerPlaybackMode -> {
                 val modeCodes = PlayerPlaybackModes.ordered
                 val options = modeCodes.map(PlayerPlaybackModes::label)
