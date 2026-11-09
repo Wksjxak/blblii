@@ -170,9 +170,9 @@ internal class VideoCommentsAdapter(
                 val previews = item.replyPreviews.take(2)
                 if (previews.isNotEmpty()) {
                     binding.rowReplyPreview.visibility = View.VISIBLE
-                    bindReplyPreviewText(binding.tvReplyPreview1, previews[0], previewUserColor)
+                    bindReplyPreviewText(binding.tvReplyPreview1, previews[0], previewUserColor, commentTextSize)
                     if (previews.size >= 2) {
-                        bindReplyPreviewText(binding.tvReplyPreview2, previews[1], previewUserColor)
+                        bindReplyPreviewText(binding.tvReplyPreview2, previews[1], previewUserColor, commentTextSize)
                         binding.tvReplyPreview2.visibility = View.VISIBLE
                     } else {
                         binding.tvReplyPreview2.text = ""
@@ -304,7 +304,14 @@ internal class VideoCommentsAdapter(
             }
         }
 
-        private fun bindReplyPreviewText(view: android.widget.TextView, preview: VideoCommentReplyPreview, userColor: Int) {
+        private fun bindReplyPreviewText(
+            view: android.widget.TextView,
+            preview: VideoCommentReplyPreview,
+            userColor: Int,
+            textSizeSp: Float,
+        ) {
+            // 预览回复跟随评论字号，否则调大字号后这行还是原来的小字
+            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, textSizeSp)
             val u = preview.userName.ifBlank { "-" }
             val m = preview.message.ifBlank { "-" }
             val s = "$u：$m"
