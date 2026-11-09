@@ -50,7 +50,7 @@ object ApkUpdater {
     /** APK 下载线路候选（运行时测速择优，TV 上尤其明显）。 */
     private val DOWNLOAD_MIRRORS =
         listOf("", GH_PROXY_PREFIX, GHFAST_PREFIX, GHPROXY_NET_PREFIX)
-    private const val DOWNLOAD_CONNECTIONS = 12
+    private const val DOWNLOAD_CONNECTIONS = 6
     private const val PROBE_BYTES = 256L * 1024L
     /** 检查更新的回退候选：直连、前缀代理、jsDelivr 上的 CHANGELOG。 */
     private const val CHANGELOG_MIRROR_URL = "https://cdn.jsdelivr.net/gh/Wksjxak/blblii@master/CHANGELOG.md"
@@ -69,9 +69,10 @@ object ApkUpdater {
         lazy {
             OkHttpClient.Builder()
                 .dns(ipv4OnlyDns { BiliClient.prefs.ipv4OnlyEnabled })
-                .connectTimeout(12, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .writeTimeout(20, TimeUnit.SECONDS)
+                .callTimeout(90, TimeUnit.SECONDS)
                 .build()
         }
 
