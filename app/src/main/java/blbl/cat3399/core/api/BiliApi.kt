@@ -2230,63 +2230,140 @@ object BiliApi {
         return paras
     }
 
-    /** 从 item 里找正文段落，兼容 modules 为数组（opus/detail）和对象（feed/detail）两种形态，并展开转发的原动态 */
-    private fun extractParagraphsFromItem(item: JSONObject): List<DynamicParagraph> {
+    /** 已知稳定路径的正文提取（opus/detail 的 modules 数组、feed/detail 的 modules 对象） */
+    private fun extractKnownBody(item: JSONObject): List<DynamicParagraph> {
         val out = ArrayList<DynamicParagraph>()
         val modulesNode = item.opt("modules")
-        var moduleDynamic: JSONObject? = null
-
-        fun collectFromContentModule(m: JSONObject) {
-            val mc = m.optJSONObject("module_content") ?: return
-            val pars = mc.optJSONArray("paragraphs") ?: return
-            out.addAll(parseOpusParagraphs(pars))
-        }
-
-        fun collectFromDynamic(md: JSONObject) {
-            if (out.isNotEmpty()) return
-            val pars = md.optJSONObject("module_content")?.optJSONArray("paragraphs")
-                ?: md.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("paragraphs")
-            if (pars != null && pars.length() > 0) {
-                out.addAll(parseOpusParagraphs(pars))
-                return
-            }
-            val descText = md.optJSONObject("desc")?.optString("text", "").orEmpty()
-            if (descText.isNotBlank()) out.add(DynamicParagraph.Text(descText))
-            val major = md.optJSONObject("major")
-            major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
-                for (k in 0 until arr.length()) {
-                    val u = arr.optJSONObject(k)?.optString("src", "").orEmpty()
-                    if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
-                }
-            }
-            if (out.none { it is DynamicParagraph.Image }) {
-                major?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
-                    for (k in 0 until arr.length()) {
-                        val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
-                        if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
-                    }
-                }
-            }
-        }
 
         if (modulesNode is JSONArray) {
             for (i in 0 until modulesNode.length()) {
                 val m = modulesNode.optJSONObject(i) ?: continue
-                collectFromContentModule(m)
-                m.optJSONObject("module_dynamic")?.let { moduleDynamic = it }
+                val pars = m.optJSONObject("module_content")?.optJSONArray("paragraphs") ?: continue
+                out.addAll(parseOpusParagraphs(pars))
+                if (out.isNotEmpty()) return out
             }
-        } else if (modulesNode is JSONObject) {
-            collectFromContentModule(modulesNode)
-            moduleDynamic = modulesNode.optJSONObject("module_dynamic")
         }
 
-        moduleDynamic?.let { collectFromDynamic(it) }
+        if (modulesNode is JSONObject) {
+            modulesNode.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
+                out.addAll(parseOpusParagraphs(pars))
+                if (out.isNotEmpty()) return out
+            }
+            val md = modulesNode.optJSONObject("module_dynamic")
+            if (md != null) {
+                md.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let { pars ->
+                    out.addAll(parseOpusParagraphs(pars))
+                    if (out.isNotEmpty()) return out
+                }
+                val major = md.optJSONObject("major")
+                major?.optJSONObject("opus")?.optJSONArray("paragraphs")?.let { pars ->
+                    out.addAll(parseOpusParagraphs(pars))
+                    if (out.isNotEmpty()) return out
+                }
+                val descText = md.optJSONObject("desc")?.optString("text", "").orEmpty()
+                if (descText.isNotBlank()) out.add(DynamicParagraph.Text(descText))
+                major?.optJSONObject("draw")?.optJSONArray("items")?.let { arr ->
+                    for (k in 0 until arr.length()) {
+                        val u = arr.optJSONObject(k)?.optString("src", "").orEmpty()
+                        if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                    }
+                }
+                if (out.none { it is DynamicParagraph.Image }) {
+                    major?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
+                        for (k in 0 until arr.length()) {
+                            val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
+                            if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                        }
+                    }
+                }
+            }
+        }
+        return out
+    }
 
-        // 转发：原动态在 module_dynamic.orig 或 item.orig
-        val orig = moduleDynamic?.optJSONObject("orig") ?: item.optJSONObject("orig")
+    /**
+     * 递归找 paragraphs：正文在 module_content.paragraphs / major.opus.paragraphs，
+     * 但不同接口/动态类型的嵌套深度不一致，固定路径会漏，所以按树搜索。
+     * skipOrig=true 时不进入 orig 子树，避免把转发原内容当成自己的正文。
+     */
+    private fun findParagraphsDeep(node: Any?, depth: Int, skipOrig: Boolean): JSONArray? {
+        if (depth > 5) return null
+        when (node) {
+            is JSONObject -> {
+                for (key in arrayOf("paragraphs", "module_content")) {
+                    val arr = node.optJSONArray(key)
+                    if (arr != null && arr.length() > 0) return arr
+                }
+                node.optJSONObject("module_content")?.optJSONArray("paragraphs")?.let {
+                    if (it.length() > 0) return it
+                }
+                for (k in node.keys()) {
+                    if (skipOrig && k == "orig") continue
+                    val v = node.opt(k)
+                    if (v is JSONObject || v is JSONArray) {
+                        findParagraphsDeep(v, depth + 1, skipOrig)?.let { return it }
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    findParagraphsDeep(node.opt(i), depth + 1, skipOrig)?.let { return it }
+                }
+            }
+        }
+        return null
+    }
+
+    /** 递归找 orig（转发原动态）：值可能是对象，也可能是数组；JSON null 视为没有 */
+    private fun findOrigDeep(node: Any?, depth: Int): JSONObject? {
+        if (depth > 4) return null
+        when (node) {
+            is JSONObject -> {
+                when (val o = node.opt("orig")) {
+                    is JSONObject -> return o
+                    is JSONArray -> {
+                        for (i in 0 until o.length()) {
+                            (o.opt(i) as? JSONObject)?.let { return it }
+                        }
+                    }
+                }
+                for (k in node.keys()) {
+                    if (k == "orig") continue
+                    val v = node.opt(k)
+                    if (v is JSONObject || v is JSONArray) {
+                        findOrigDeep(v, depth + 1)?.let { return it }
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    findOrigDeep(node.opt(i), depth + 1)?.let { return it }
+                }
+            }
+        }
+        return null
+    }
+
+    /** 把 item 转成正文段落；自己的正文 + （若有）转发原动态正文 */
+    private fun extractParagraphsFromItem(item: JSONObject): List<DynamicParagraph> {
+        val out = ArrayList<DynamicParagraph>()
+
+        // 1) 自己的正文：先走已知稳定路径，拿不到再树搜索兜底
+        val known = extractKnownBody(item)
+        if (known.isNotEmpty()) {
+            out.addAll(known)
+        } else {
+            findParagraphsDeep(item, 0, skipOrig = true)?.let { pars ->
+                out.addAll(parseOpusParagraphs(pars))
+            }
+        }
+
+        // 2) 转发原动态
+        val orig = findOrigDeep(item, 0)
         if (orig != null) {
-            val origModules = orig.optJSONObject("modules")
-            val author = origModules?.optJSONObject("module_author")?.optString("name", "").orEmpty()
+            val author =
+                orig.optJSONObject("modules")?.optJSONObject("module_author")?.optString("name", "").orEmpty()
+                    .ifBlank { orig.optJSONObject("user")?.optString("name", "").orEmpty() }
             out.add(DynamicParagraph.Separator)
             out.add(
                 DynamicParagraph.Text(
@@ -2294,16 +2371,20 @@ object BiliApi {
                     isHeading = true,
                 ),
             )
-            val origDynamic = origModules?.optJSONObject("module_dynamic") ?: orig.optJSONObject("module_dynamic")
-            val origPars = origDynamic?.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("paragraphs")
-            if (origPars != null && origPars.length() > 0) {
-                out.addAll(parseOpusParagraphs(origPars))
+            val origBody =
+                extractKnownBody(orig).ifEmpty {
+                    findParagraphsDeep(orig, 0, skipOrig = true)?.let { parseOpusParagraphs(it) } ?: emptyList()
+                }
+            if (origBody.isNotEmpty()) {
+                out.addAll(origBody)
             } else {
-                val oTitle = origDynamic?.optJSONObject("major")?.optString("title", "").orEmpty()
+                val origModules = orig.optJSONObject("modules")
+                val origMd = origModules?.optJSONObject("module_dynamic")
+                val oTitle = origMd?.optJSONObject("major")?.optString("title", "").orEmpty()
                 if (oTitle.isNotBlank()) out.add(DynamicParagraph.Text(oTitle, isHeading = true))
-                val oDesc = origDynamic?.optJSONObject("desc")?.optString("text", "").orEmpty()
+                val oDesc = origMd?.optJSONObject("desc")?.optString("text", "").orEmpty()
                 if (oDesc.isNotBlank()) out.add(DynamicParagraph.Text(oDesc))
-                origDynamic?.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
+                origMd?.optJSONObject("major")?.optJSONObject("opus")?.optJSONArray("pics")?.let { arr ->
                     for (k in 0 until arr.length()) {
                         val u = arr.optJSONObject(k)?.optString("url", "").orEmpty()
                         if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
@@ -2312,16 +2393,24 @@ object BiliApi {
             }
         }
 
-        // 诊断：内容异常少时把结构打出来，便于下一轮定位（不改行为）
-        if (out.size <= 2) {
-            val mdKeys = moduleDynamic?.keys()?.asSequence()?.joinToString(",").orEmpty()
-            val itemKeys = item.keys().asSequence().joinToString(",")
-            AppLog.w(
-                TAG,
-                "detailTooShort keys=[$itemKeys] module_dynamic=$mdKeys " +
-                    "orig=${if (orig != null) "yes" else "no"} paras=${out.size}",
-            )
-        }
+        // 3) 诊断：字段层级不固定，下一个日志能直接看出模块形态
+        val modules = item.opt("modules")
+        val modulesDesc =
+            when (modules) {
+                is JSONArray ->
+                    "array[" +
+                        (0 until modules.length()).joinToString("|") { i ->
+                            modules.optJSONObject(i)?.keys()?.asSequence()?.joinToString(",").orEmpty()
+                        } + "]"
+                is JSONObject -> "object[" + modules.keys().asSequence().joinToString(",") + "]"
+                else -> "none"
+            }
+        val itemKeys = item.keys().asSequence().joinToString(",")
+        val bodyCount = out.count { it !is DynamicParagraph.Separator && !(it is DynamicParagraph.Text && it.isHeading) }
+        AppLog.d(
+            TAG,
+            "extract keys=[$itemKeys] modules=$modulesDesc body=$bodyCount total=${out.size}",
+        )
         return out
     }
 
