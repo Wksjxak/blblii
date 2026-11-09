@@ -1827,11 +1827,18 @@ object BiliApi {
             var title: String? = null
 
             major?.let { m ->
+                // 先从 major 自身取 title（很多类型通用），再补 opus 内部
+                title = m.optString("title", "").trim()
+                    .ifBlank { m.optString("jump_title", "").trim() }
+                    .ifBlank { m.optJSONObject("display")?.optString("title", "")?.trim().orEmpty() }
+                    .ifBlank { null }
                 val opus = m.optJSONObject("opus")
                 if (opus != null) {
-                    title = opus.optString("title", "").trim().ifBlank {
-                        opus.optJSONObject("display")?.optString("title", "")?.trim().orEmpty()
-                    }.ifBlank { null }
+                    if (title == null) {
+                        title = opus.optString("title", "").trim().ifBlank {
+                            opus.optJSONObject("display")?.optString("title", "")?.trim().orEmpty()
+                        }.ifBlank { null }
+                    }
                     opus.optJSONArray("pics")?.let { arr ->
                         for (k in 0 until arr.length()) {
                             val u = arr.optJSONObject(k)?.optString("url", "")
