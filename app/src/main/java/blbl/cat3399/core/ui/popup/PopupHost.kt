@@ -224,6 +224,12 @@ internal class PopupHost private constructor(
 
         val overlay = root.findViewById<View>(R.id.overlay)
         val card = root.findViewById<View>(R.id.card)
+
+        // 鼠标滚轮：命中弹窗但没被子 View（如评论列表）消费时，根视图直接吃掉，
+        // 否则事件会穿透到弹窗后面的列表，出现「评论区滚，下面动态也跟着滚」。
+        root.setOnGenericMotionListener { _, ev ->
+            ev.actionMasked == android.view.MotionEvent.ACTION_SCROLL
+        }
         val tvTitle = root.findViewById<TextView>(R.id.tv_title)
         val content = root.findViewById<FrameLayout>(R.id.content)
         val actionsRow = root.findViewById<LinearLayout>(R.id.actions)
