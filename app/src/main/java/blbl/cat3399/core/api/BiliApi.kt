@@ -1864,8 +1864,8 @@ object BiliApi {
             }
 
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
-                val rawId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
-                    "rich_${ownerName}_${authorPubTs ?: 0}"
+                val rawId = it.optString("id_str", it.optString("id", "")).ifBlank {
+                    trackId ?: "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
                 // 评论 oid 和 type 从 item.basic 取，不要猜
                 val basic = it.optJSONObject("basic")

@@ -1622,21 +1622,88 @@ class UpDetailActivity : BaseActivity() {
             )
         }
 
-    private fun showFullImage(url: String) {
+    private fun showFullImage(url: String, triggerView: View? = null) {
+        val density = resources.displayMetrics.density
+        val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+
+        val container = android.widget.FrameLayout(this).apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
+
         val iv = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
         }
-        AppPopup.custom(
-            context = this,
-            title = null,
-            cancelable = true,
-            actions = emptyList(),
-            preferredActionRole = null,
-            autoFocus = false,
-            modalSizing = PopupModalSizing(widthRatio = 1f, maxWidthDp = 1920f, maxHeightRatio = 1f),
-            content = { iv },
+        container.addView(
+            iv,
+            android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
         )
+
+        var zoomed = false
+        val zoomScale = 2.0f
+        val panStep = (60 * density).toFloat()
+
+        container.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK -> {
+                    dialog.dismiss()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                -> {
+                    zoomed = !zoomed
+                    if (zoomed) {
+                        iv.animate().scaleX(zoomScale).scaleY(zoomScale).setDuration(150).start()
+                    } else {
+                        iv.animate().scaleX(1f).scaleY(1f)
+                            .translationX(0f).translationY(0f).setDuration(150).start()
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (zoomed) iv.translationX = (iv.translationX + panStep).coerceAtMost(0f)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (zoomed) {
+                        val maxTx = -iv.width * (zoomScale - 1f) / 2f
+                        iv.translationX = (iv.translationX - panStep).coerceAtLeast(maxTx)
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (zoomed) iv.translationY = (iv.translationY + panStep).coerceAtMost(0f)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (zoomed) {
+                        val maxTy = -iv.height * (zoomScale - 1f) / 2f
+                        iv.translationY = (iv.translationY - panStep).coerceAtLeast(maxTy)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        dialog.setContentView(container)
+        dialog.setOnDismissListener {
+            triggerView?.post {
+                if (triggerView.isAttachedToWindow && triggerView.visibility == View.VISIBLE) {
+                    triggerView.requestFocus()
+                }
+            }
+        }
+        dialog.show()
+        container.requestFocus()
     }
 
     private fun openDynamicDetail(item: DynamicFeedItem.Rich) {
@@ -1650,6 +1717,10 @@ class UpDetailActivity : BaseActivity() {
 
         fun renderContent(title: String?, text: String, images: List<String>) {
             container.removeAllViews()
+            val fullWidthLp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
             if (!title.isNullOrBlank()) {
                 android.widget.TextView(this).apply {
                     this.text = title
@@ -1657,7 +1728,7 @@ class UpDetailActivity : BaseActivity() {
                     textSize = 26f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                     setPadding(0, 0, 0, padV / 2)
-                    container.addView(this)
+                    container.addView(this, fullWidthLp)
                 }
             }
             if (text.isNotBlank()) {
@@ -1666,7 +1737,7 @@ class UpDetailActivity : BaseActivity() {
                     setTextColor(android.graphics.Color.WHITE)
                     textSize = BiliClient.prefs.dynamicDetailTextSize
                     setLineSpacing(0f, 1.3f)
-                    container.addView(this)
+                    container.addView(this, fullWidthLp)
                 }
             }
             images.forEach { url ->
@@ -1676,14 +1747,12 @@ class UpDetailActivity : BaseActivity() {
                         (240 * density).toInt(),
                     )
                     lp.topMargin = padV
-                    layoutParams = lp
                     scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                    adjustViewBounds = true
                     isFocusable = true
                     isClickable = true
                     blbl.cat3399.core.image.ImageLoader.loadInto(this, url)
-                    setOnClickListener { showFullImage(url) }
-                    container.addView(this)
+                    setOnClickListener { showFullImage(url, triggerView = this) }
+                    container.addView(this, lp)
                 }
             }
         }

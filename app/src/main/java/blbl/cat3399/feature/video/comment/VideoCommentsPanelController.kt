@@ -207,7 +207,7 @@ internal class VideoCommentsPanelController(
                                 val rvCenter = rv.height / 2
                                 val childCenter = view.top + view.height / 2
                                 val dy = childCenter - rvCenter
-                                if (kotlin.math.abs(dy) > rv.height / 4) {
+                                if (kotlin.math.abs(dy) > rv.height / 6) {
                                     rv.smoothScrollBy(0, dy)
                                 }
                             }
@@ -420,15 +420,17 @@ internal class VideoCommentsPanelController(
         val targetPos = commentsState.items.indexOfFirst { it.rpid == rpid }
         if (targetPos !in commentsState.items.indices) return false
 
-        val direct = views.comments.findViewHolderForAdapterPosition(targetPos)?.itemView
-        if (direct != null) {
-            direct.requestFocus()
-            return true
-        }
+        val lm = views.comments.layoutManager as? LinearLayoutManager ?: return false
+        val rvHeight = views.comments.height.takeIf { it > 0 } ?: return false
 
-        views.comments.scrollToPosition(targetPos)
+        // 先把目标项预定位到屏幕中部附近，避免 requestFocus 时 View 在屏幕外导致居中滚动计算偏差
+        val preOffset = (rvHeight * 0.3f).toInt()
+        lm.scrollToPositionWithOffset(targetPos, preOffset)
+
         views.comments.post {
-            views.comments.findViewHolderForAdapterPosition(targetPos)?.itemView?.requestFocus()
+            if (!isActive()) return@post
+            val holder = views.comments.findViewHolderForAdapterPosition(targetPos)?.itemView
+            holder?.requestFocus()
         }
         return true
     }
