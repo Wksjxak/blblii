@@ -1867,8 +1867,13 @@ object BiliApi {
                 val rawId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
                     "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
-                val dynOid = runCatching {
-                    if (isOpus && opusId != null) return@runCatching opusId
+                // 评论 oid 和 type 从 item.basic 取，不要猜
+                val basic = it.optJSONObject("basic")
+                val commentOid = basic?.optString("comment_id_str", "")?.toLongOrNull()
+                    ?: basic?.optLong("comment_id", 0L)?.takeIf { v -> v > 0L }
+                val commentTypeFromBasic = basic?.optInt("comment_type", 0)?.takeIf { v -> v > 0 }
+                val finalCommentType = commentTypeFromBasic ?: (if (isOpus) 12 else 17)
+                val finalOid = commentOid ?: runCatching {
                     desc?.optLong("dyn_id", 0L)?.takeIf { v -> v > 0L }
                         ?: desc?.optString("dyn_str", "")?.toLongOrNull()
                         ?: it.optLong("id", 0L).takeIf { v -> v > 0L }
@@ -1915,8 +1920,8 @@ object BiliApi {
                 cards.add(
                     DynamicFeedItem.Rich(
                         dynId = rawId,
-                        dynOid = dynOid,
-                        commentType = if (isOpus) 12 else 17,
+                        dynOid = finalOid,
+                        commentType = finalCommentType,
                         text = text,
                         title = title,
                         images = images.take(3),
