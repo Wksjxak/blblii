@@ -116,8 +116,24 @@ class UpDynamicAdapter(
         private val onClick: (DynamicFeedItem.Rich) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: DynamicFeedItem.Rich) {
-            binding.tvRichText.text = item.text.ifBlank { "图文动态" }
             binding.tvRichTime.text = item.pubTs?.let { Format.pubDateText(it) }.orEmpty()
+            val hasTitle = !item.title.isNullOrBlank()
+            binding.tvRichTitle.visibility = if (hasTitle) android.view.View.VISIBLE else android.view.View.GONE
+            binding.tvRichTitle.text = item.title.orEmpty()
+            if (item.text.isBlank()) {
+                binding.tvRichText.visibility = android.view.View.GONE
+            } else {
+                binding.tvRichText.visibility = android.view.View.VISIBLE
+                binding.tvRichText.text = item.text
+                // 纯文动态（无标题）：正文即标题，加大加粗；有标题：正文小字
+                if (hasTitle) {
+                    binding.tvRichText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
+                    binding.tvRichText.setTypeface(null, android.graphics.Typeface.NORMAL)
+                } else {
+                    binding.tvRichText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20f)
+                    binding.tvRichText.setTypeface(null, android.graphics.Typeface.BOLD)
+                }
+            }
             binding.root.setOnClickListener { onClick(item) }
             binding.rowRichImages.visibility =
                 if (item.images.isEmpty()) View.GONE else View.VISIBLE

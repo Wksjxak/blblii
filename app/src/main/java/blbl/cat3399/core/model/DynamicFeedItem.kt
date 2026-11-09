@@ -13,6 +13,7 @@ sealed class DynamicFeedItem {
     data class Rich(
         val dynId: String,
         val text: String,
+        val title: String?,
         val images: List<String>,
         val authorName: String,
         val authorFace: String?,

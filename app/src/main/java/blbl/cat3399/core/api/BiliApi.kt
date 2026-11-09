@@ -1824,10 +1824,14 @@ object BiliApi {
             val desc = moduleDynamic.optJSONObject("desc")
             val text = desc?.optString("text", "").orEmpty().trim()
             val images = ArrayList<String>()
+            var title: String? = null
 
             major?.let { m ->
                 val opus = m.optJSONObject("opus")
                 if (opus != null) {
+                    title = opus.optString("title", "").trim().ifBlank {
+                        opus.optJSONObject("display")?.optString("title", "")?.trim().orEmpty()
+                    }.ifBlank { null }
                     opus.optJSONArray("pics")?.let { arr ->
                         for (k in 0 until arr.length()) {
                             val u = arr.optJSONObject(k)?.optString("url", "")
@@ -1846,7 +1850,7 @@ object BiliApi {
                 }
             }
 
-            if (text.isNotBlank() || images.isNotEmpty()) {
+            if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
                 val dynId = trackId ?: it.optString("id_str", it.optString("id", "")).ifBlank {
                     "rich_${ownerName}_${authorPubTs ?: 0}"
                 }
@@ -1854,6 +1858,7 @@ object BiliApi {
                     DynamicFeedItem.Rich(
                         dynId = dynId,
                         text = text,
+                        title = title,
                         images = images.take(3),
                         authorName = ownerName,
                         authorFace = ownerFace,
