@@ -1865,6 +1865,24 @@ object BiliApi {
                         }
                     }
                 }
+                // 老动态类型兜底：专栏(cv)、直播回放/预约，之前直接被丢卡
+                m.optJSONObject("article")?.let { art ->
+                    if (title == null) {
+                        title = art.optString("title", "").trim()
+                            .ifBlank { art.optString("jump_title", "").trim() }
+                            .ifBlank { null }
+                    }
+                    art.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
+                    if (text.isBlank()) text = art.optString("desc", "").trim()
+                }
+                m.optJSONObject("live_reverse")?.let { lv ->
+                    if (title == null) {
+                        title = lv.optString("title", "").trim()
+                            .ifBlank { lv.optString("desc", "").trim() }
+                            .ifBlank { null }
+                    }
+                    lv.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
+                }
             }
 
             // 卡片展示文本：paragraphs 存在时用其文字拼接（opus 的 desc.text 只是摘要）
@@ -1881,6 +1899,14 @@ object BiliApi {
                 )
             }
 
+            if (text.isBlank() && images.isEmpty() && title.isNullOrBlank()) {
+                AppLog.d(
+                    TAG,
+                    "feedDrop type=${it.optString("type", "")} " +
+                        "majorKeys=${major?.keys()?.asSequence()?.joinToString(",").orEmpty()} " +
+                        "modulesKeys=${modules.keys().asSequence().joinToString(",")}",
+                )
+            }
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
                 val rawId = it.optString("id_str", it.optString("id", "")).ifBlank {
                     trackId ?: "rich_${ownerName}_${authorPubTs ?: 0}"
