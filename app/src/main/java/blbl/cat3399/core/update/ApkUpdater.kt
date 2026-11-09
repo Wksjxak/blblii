@@ -294,7 +294,12 @@ object ApkUpdater {
             val prefix = if (prerelease) TEST_TAG_PREFIX else null
             runCatching { parseReleaseObject(obj, prefix) }.getOrNull()?.let { out.add(it) }
         }
-        return out
+        // GitHub releases API 返回顺序不可靠，本地按版本号数字排序取最新
+        return out.sortedWith { a, b ->
+            val pa = parseVersion(a.versionName)
+            val pb = parseVersion(b.versionName)
+            if (pa != null && pb != null) compareVersion(pb, pa) else b.versionName.compareTo(a.versionName)
+        }
     }
 
     /** 从 GitHub Releases API 取最新正式版：版本号、更新说明、APK 直链。 */
