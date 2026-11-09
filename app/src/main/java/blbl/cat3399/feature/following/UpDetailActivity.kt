@@ -62,6 +62,7 @@ class UpDetailActivity : BaseActivity() {
     private lateinit var binding: ActivityUpDetailBinding
 
     private lateinit var archiveAdapter: VideoCardAdapter
+    private lateinit var dynamicAdapter: VideoCardAdapter
     private lateinit var sectionAdapter: UpDetailSectionAdapter
 
     private lateinit var archiveLayoutManager: GridLayoutManager
@@ -69,7 +70,7 @@ class UpDetailActivity : BaseActivity() {
 
     private val mid: Long by lazy { intent.getLongExtra(EXTRA_MID, 0L) }
 
-    private enum class UpTab { ARCHIVE, COLLECTION_SERIES }
+    private enum class UpTab { ARCHIVE, DYNAMIC, COLLECTION_SERIES }
 
     private var currentTab: UpTab = UpTab.ARCHIVE
 
@@ -86,6 +87,14 @@ class UpDetailActivity : BaseActivity() {
     private var archiveEndReached: Boolean = false
     private var archiveNextPage: Int = 1
     private var archiveRequestToken: Int = 0
+
+    // 动态栏：offset 分页，单次只拉一页（maxPages=1），滚动到底再拉下一页
+    private val loadedDynamicStableKeys = HashSet<String>()
+    private var dynamicIsLoadingMore: Boolean = false
+    private var dynamicEndReached: Boolean = false
+    private var dynamicNextOffset: String? = null
+    private var dynamicRequestToken: Int = 0
+    private var pendingFocusFirstDynamicItemAfterLoad: Boolean = false
 
     // 浏览态（未搜索）的原始投稿与展示列表，搜索退出时用来还原列表
     private val archiveBrowseItems = ArrayList<VideoCard>()
@@ -179,6 +188,11 @@ class UpDetailActivity : BaseActivity() {
                 archiveAdapter.itemCount == 0
             ) {
                 resetAndLoadArchive()
+            }
+        } else if (currentTab == UpTab.DYNAMIC) {
+            archiveLayoutManager.spanCount = spanCountForWidth()
+            if (!binding.swipeRefresh.isRefreshing && dynamicAdapter.itemCount == 0) {
+                resetAndLoadDynamic()
             }
         } else {
             if (!binding.swipeRefresh.isRefreshing && sectionAdapter.itemCount == 0) {
@@ -352,6 +366,38 @@ class UpDetailActivity : BaseActivity() {
                 actionDelegate = archiveActionController,
             )
 
+        val dynamicActionController =
+            VideoCardActionController(
+                context = this,
+                scope = lifecycleScope,
+                dismissBehavior = VideoCardDismissBehavior.LocalNotInterested,
+                onOpenDetail = { _, pos ->
+                    openVideoDetailFromPlaybackHandle(
+                        playbackHandle = dynamicPlaybackHandle(),
+                        position = pos,
+                    )
+                },
+                onOpenUp = { card -> openUpDetailForCard(card) },
+                onCardRemoved = { stableKey ->
+                    binding.recycler.removeVideoCardAndRestoreFocus(
+                        adapter = dynamicAdapter,
+                        stableKey = stableKey,
+                        isAlive = { !isFinishing && !isDestroyed && currentTab == UpTab.DYNAMIC },
+                    )
+                },
+            )
+        dynamicAdapter =
+            VideoCardAdapter(
+                onClick = { _, pos ->
+                    openVideoFromPlaybackHandle(
+                        playbackHandle = dynamicPlaybackHandle(),
+                        position = pos,
+                        openDetailBeforePlay = BiliClient.prefs.playerOpenDetailBeforePlay,
+                    )
+                },
+                actionDelegate = dynamicActionController,
+            )
+
         sectionAdapter =
             UpDetailSectionAdapter(
                 onVideoClick = { section, _, index ->
@@ -371,6 +417,7 @@ class UpDetailActivity : BaseActivity() {
     private fun setupTabs() {
         binding.tabLayout.removeAllTabs()
         binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.up_tab_archive))
+        binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.up_tab_dynamic))
         binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.up_tab_collection_series))
 
         binding.tabLayout.addOnTabSelectedListener(
@@ -378,7 +425,8 @@ class UpDetailActivity : BaseActivity() {
                 override fun onTabSelected(tab: TabLayout.Tab) {
                     val next =
                         when (tab.position) {
-                            1 -> UpTab.COLLECTION_SERIES
+                            1 -> UpTab.DYNAMIC
+                            2 -> UpTab.COLLECTION_SERIES
                             else -> UpTab.ARCHIVE
                         }
                     switchTab(next)
@@ -662,6 +710,30 @@ class UpDetailActivity : BaseActivity() {
                 installArchiveGridController()
             }
 
+            UpTab.DYNAMIC -> {
+                binding.llArchiveSearch.isVisible = false
+                binding.recycler.adapter = dynamicAdapter
+                binding.recycler.layoutManager = archiveLayoutManager
+                archiveLayoutManager.spanCount = spanCountForWidth()
+
+                binding.recycler.addOnScrollListener(
+                    object : RecyclerView.OnScrollListener() {
+                        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                            if (dy > 0) collapseHeaderForContent()
+                            if (dy <= 0) return
+                            if (dynamicIsLoadingMore || dynamicEndReached) return
+                            val lm = recyclerView.layoutManager as? GridLayoutManager ?: return
+                            val lastVisible = lm.findLastVisibleItemPosition()
+                            val total = dynamicAdapter.itemCount
+                            if (total <= 0) return
+                            if (total - lastVisible - 1 <= 8) loadMoreDynamic()
+                        }
+                    },
+                )
+
+                installArchiveGridController()
+            }
+
             UpTab.COLLECTION_SERIES -> {
                 binding.llArchiveSearch.isVisible = false
                 binding.recycler.adapter = sectionAdapter
@@ -699,6 +771,12 @@ class UpDetailActivity : BaseActivity() {
                 }
             }
 
+            UpTab.DYNAMIC -> {
+                if (!binding.swipeRefresh.isRefreshing && dynamicAdapter.itemCount == 0) {
+                    resetAndLoadDynamic()
+                }
+            }
+
             UpTab.COLLECTION_SERIES -> ensureSeasonsSeriesLoadedIfNeeded()
         }
     }
@@ -725,12 +803,17 @@ class UpDetailActivity : BaseActivity() {
         if (forceFocusFirstContentAfterRefresh) {
             when (currentTab) {
                 UpTab.ARCHIVE -> archiveGridController?.parkFocusForDataSetReset()
+                UpTab.DYNAMIC -> {
+                    pendingFocusFirstDynamicItemAfterLoad = true
+                    parkFocusInRecyclerForDataSetReset()
+                }
                 UpTab.COLLECTION_SERIES -> parkFocusInRecyclerForDataSetReset()
             }
         }
         loadHeader()
         when (currentTab) {
             UpTab.ARCHIVE -> resetAndLoadArchive()
+            UpTab.DYNAMIC -> resetAndLoadDynamic()
             UpTab.COLLECTION_SERIES -> resetAndLoadSeasonsSeries()
         }
     }
@@ -791,6 +874,16 @@ class UpDetailActivity : BaseActivity() {
                 return true
             }
 
+            UpTab.DYNAMIC -> {
+                if (dynamicAdapter.itemCount > 0) {
+                    focusGridAt(0)
+                    return true
+                }
+                pendingFocusFirstDynamicItemAfterLoad = true
+                if (!binding.swipeRefresh.isRefreshing) resetAndLoadDynamic()
+                return true
+            }
+
             UpTab.COLLECTION_SERIES -> {
                 if (seasonsSeriesSections.isNotEmpty()) {
                     focusFirstSectionVideo()
@@ -807,6 +900,12 @@ class UpDetailActivity : BaseActivity() {
         return when (currentTab) {
             UpTab.ARCHIVE -> {
                 if (archiveAdapter.itemCount <= 0) return false
+                focusGridAt(0)
+                true
+            }
+
+            UpTab.DYNAMIC -> {
+                if (dynamicAdapter.itemCount <= 0) return false
                 focusGridAt(0)
                 true
             }
@@ -943,6 +1042,64 @@ class UpDetailActivity : BaseActivity() {
             } finally {
                 if (token == archiveRequestToken) binding.swipeRefresh.isRefreshing = false
                 archiveIsLoadingMore = false
+            }
+        }
+    }
+
+    private fun resetAndLoadDynamic() {
+        if (forceFocusFirstContentAfterRefresh) {
+            pendingFocusFirstDynamicItemAfterLoad = true
+            parkFocusInRecyclerForDataSetReset()
+        } else {
+            val focused = currentFocus
+            if (focused != null && focused != binding.recycler && FocusTreeUtils.isDescendantOf(focused, binding.recycler)) {
+                pendingFocusFirstDynamicItemAfterLoad = true
+            }
+        }
+        dynamicRequestToken++
+        loadedDynamicStableKeys.clear()
+        dynamicNextOffset = null
+        dynamicEndReached = false
+        dynamicIsLoadingMore = false
+        dynamicAdapter.submit(emptyList())
+        binding.swipeRefresh.isRefreshing = true
+        loadMoreDynamic(isRefresh = true)
+    }
+
+    private fun loadMoreDynamic(isRefresh: Boolean = false) {
+        if (dynamicIsLoadingMore || dynamicEndReached) return
+        val token = dynamicRequestToken
+        val offset = dynamicNextOffset
+        dynamicIsLoadingMore = true
+        lifecycleScope.launch {
+            try {
+                // 单次只拉一页（maxPages=1）：滚动到底再拉下一页，避免一上来追好几页
+                val page = BiliApi.dynamicSpaceVideo(
+                    hostMid = mid,
+                    offset = offset,
+                    minCardCount = 0,
+                    maxPages = 1,
+                )
+                if (token != dynamicRequestToken) return@launch
+
+                dynamicNextOffset = page.nextOffset
+                dynamicEndReached = page.nextOffset == null
+
+                val fresh = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedDynamicStableKeys)
+                fresh.forEach { loadedDynamicStableKeys.add(it.stableKey()) }
+                if (isRefresh) dynamicAdapter.submit(fresh) else dynamicAdapter.append(fresh)
+
+                binding.recycler.post {
+                    maybeConsumePendingFocusFirstContentAfterLoad()
+                    archiveGridController?.consumePendingFocusAfterLoadMore()
+                }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                AppLog.e("UpDetail", "loadDynamic failed mid=$mid", t)
+                AppToast.show(this@UpDetailActivity, "加载失败，可查看 Logcat(标签 BLBL)")
+            } finally {
+                if (token == dynamicRequestToken) binding.swipeRefresh.isRefreshing = false
+                dynamicIsLoadingMore = false
             }
         }
     }
@@ -1323,6 +1480,14 @@ class UpDetailActivity : BaseActivity() {
                 focusGridAt(0)
             }
 
+            UpTab.DYNAMIC -> {
+                if (!force && !pendingFocusFirstDynamicItemAfterLoad) return
+                if (dynamicAdapter.itemCount <= 0) return
+                pendingFocusFirstDynamicItemAfterLoad = false
+                forceFocusFirstContentAfterRefresh = false
+                focusGridAt(0)
+            }
+
             UpTab.COLLECTION_SERIES -> {
                 if (!force && !pendingFocusFirstSectionItemAfterLoad) return
                 if (seasonsSeriesSections.isEmpty()) return
@@ -1364,15 +1529,28 @@ class UpDetailActivity : BaseActivity() {
                         }
 
                         override fun canLoadMore(): Boolean =
-                            if (archiveSearchQuery.isNotBlank()) archiveSearchUi?.canLoadMore == true else !archiveEndReached
+                            when (currentTab) {
+                                UpTab.ARCHIVE ->
+                                    if (archiveSearchQuery.isNotBlank()) archiveSearchUi?.canLoadMore == true else !archiveEndReached
+                                UpTab.DYNAMIC -> !dynamicEndReached
+                                UpTab.COLLECTION_SERIES -> false
+                            }
 
                         override fun loadMore() {
-                            if (archiveSearchQuery.isNotBlank()) archiveSearchController?.loadMore() else loadMoreArchive()
+                            when (currentTab) {
+                                UpTab.ARCHIVE ->
+                                    if (archiveSearchQuery.isNotBlank()) archiveSearchController?.loadMore() else loadMoreArchive()
+                                UpTab.DYNAMIC -> loadMoreDynamic()
+                                UpTab.COLLECTION_SERIES -> Unit
+                            }
                         }
                     },
                 config =
                     DpadGridController.Config(
-                        isEnabled = { !isFinishing && !isDestroyed && currentTab == UpTab.ARCHIVE },
+                        isEnabled = {
+                            !isFinishing && !isDestroyed &&
+                                (currentTab == UpTab.ARCHIVE || currentTab == UpTab.DYNAMIC)
+                        },
                         enableCenterLongPressToLongClick = true,
                         // Let DPAD_UP bubble if we couldn't move focus to the tab strip. Consuming
                         // unconditionally creates a focus trap (can't reach header/tab).
@@ -1424,6 +1602,22 @@ class UpDetailActivity : BaseActivity() {
                 nextCursor = targetPage + 1,
                 hasMore = page.hasMore,
                 canAdvance = page.hasMore && page.items.isNotEmpty(),
+            )
+        }
+
+    private fun dynamicPlaybackHandle() =
+        buildPagedVideoCardPlaybackHandle<String?>(
+            source = "UpDetail:$mid:dynamic",
+            cardsProvider = { dynamicAdapter.snapshot() },
+            nextCursorProvider = { dynamicNextOffset },
+            hasMoreProvider = { !dynamicEndReached },
+        ) { cursor ->
+            val page = BiliApi.dynamicSpaceVideo(hostMid = mid, offset = cursor, minCardCount = 0, maxPages = 1)
+            VideoCardPlaylistPage(
+                cards = page.items,
+                nextCursor = page.nextOffset,
+                hasMore = page.nextOffset != null,
+                canAdvance = page.nextOffset != null && page.items.isNotEmpty(),
             )
         }
 

@@ -87,6 +87,7 @@
     <string name="up_tab_archive">投稿</string>
     <string name="up_archive_search_hint">搜索 TA 的视频（可用拼音 / 首字母）</string>
     <string name="up_archive_search_clear">清空</string>
+    <string name="up_tab_dynamic">动态</string>
     <string name="up_tab_collection">合集</string>
     <string name="up_tab_series">系列</string>
     <string name="up_tab_collection_series">合集和系列</string>
