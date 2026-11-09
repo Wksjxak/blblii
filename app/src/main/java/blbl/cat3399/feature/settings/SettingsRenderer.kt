@@ -248,6 +248,18 @@ class SettingsRenderer(
             "页面设置" ->
                 listOf(
                     SettingEntry(SettingId.StartupPage, "启动默认页", SettingsText.startupPageText(activity, prefs.startupPage), null),
+                    SettingEntry(
+                        SettingId.ResumeOnLaunchEnabled,
+                        "启动时提示继续上次观看",
+                        if (prefs.resumeOnLaunchEnabled) "开" else "关",
+                        "打开 App 时弹窗提示接着看上次的视频",
+                    ),
+                    SettingEntry(
+                        SettingId.ResumeOnLaunchAutoDismiss,
+                        "提示自动消失",
+                        if (prefs.resumeOnLaunchAutoDismiss) "3 秒后自动关闭" else "需手动取消",
+                        "仅在上面开关开启时生效",
+                    ),
                     SettingEntry(SettingId.GridSpanCount, "每行卡片数量", SettingsText.gridSpanText(prefs.gridSpanCount), null),
                     SettingEntry(
                         SettingId.DynamicGridSpanCount,
@@ -383,6 +395,7 @@ class SettingsRenderer(
                         SettingsText.seekStepSecondsText(prefs.playerShortSeekStepSeconds),
                         null,
                     ),
+                    SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进方式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),
                     SettingEntry(
                         SettingId.PlayerHoldSeekSpeed,
                         "长按倍速档位",
@@ -420,7 +433,6 @@ class SettingsRenderer(
                         "${prefs.progressPercentDecimals} 位",
                         "仅百分比样式下生效",
                     ),
-                    SettingEntry(SettingId.PlayerHoldSeekMode, "长按快进方式", SettingsText.holdSeekModeText(prefs.playerHoldSeekMode), null),
                     SettingEntry(
                         SettingId.PlayerHoldScrubTraverseSeconds,
                         "拖完整个视频所需时间",

@@ -121,6 +121,8 @@ enum class SettingId(
     ExportLogs("export_logs"),
     UploadLogs("upload_logs"),
     AutoUpdateCheckEnabled("auto_update_check_enabled"),
+    ResumeOnLaunchEnabled("resume_on_launch_enabled"),
+    ResumeOnLaunchAutoDismiss("resume_on_launch_auto_dismiss"),
     CheckUpdate("check_update"),
 
     // 设备信息

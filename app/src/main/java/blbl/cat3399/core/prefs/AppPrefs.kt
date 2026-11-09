@@ -141,6 +141,14 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_UPDATE_CHECK_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_UPDATE_CHECK_ENABLED, value).apply()
 
+    var resumeOnLaunchEnabled: Boolean
+        get() = prefs.getBoolean(KEY_RESUME_ON_LAUNCH_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_RESUME_ON_LAUNCH_ENABLED, value).apply()
+
+    var resumeOnLaunchAutoDismiss: Boolean
+        get() = prefs.getBoolean(KEY_RESUME_ON_LAUNCH_AUTO_DISMISS, true)
+        set(value) = prefs.edit().putBoolean(KEY_RESUME_ON_LAUNCH_AUTO_DISMISS, value).apply()
+
     var autoUpdateLastCheckAtMs: Long
         get() = prefs.getLong(KEY_AUTO_UPDATE_LAST_CHECK_AT_MS, 0L)
         set(value) = prefs.edit().putLong(KEY_AUTO_UPDATE_LAST_CHECK_AT_MS, value).apply()
@@ -1263,6 +1271,8 @@ class AppPrefs(context: Context) {
         private const val KEY_FOLLOWING_LIST_ORDER = "following_list_order"
         private const val KEY_DYNAMIC_FOLLOWING_RECENT_UPDATE_DOT_ENABLED = "dynamic_following_recent_update_dot_enabled"
         private const val KEY_AUTO_UPDATE_CHECK_ENABLED = "auto_update_check_enabled"
+        private const val KEY_RESUME_ON_LAUNCH_ENABLED = "resume_on_launch_enabled"
+        private const val KEY_RESUME_ON_LAUNCH_AUTO_DISMISS = "resume_on_launch_auto_dismiss"
         private const val KEY_AUTO_UPDATE_IGNORED_VERSION_NAME = "auto_update_ignored_version_name"
         private const val KEY_AUTO_UPDATE_LAST_CHECK_AT_MS = "auto_update_last_check_at_ms"
         private const val KEY_IMAGE_QUALITY = "image_quality"

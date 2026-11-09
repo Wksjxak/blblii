@@ -25,6 +25,8 @@ import blbl.cat3399.core.account.AccountSessionStore
 import blbl.cat3399.core.api.BiliApi
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.log.CrashTracker
+import blbl.cat3399.core.model.HistoryEntry
+import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.prefs.AppPrefs
 import blbl.cat3399.core.tv.RemoteKeys
@@ -76,6 +78,8 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
     private var autoUpdatePromptPopup: PopupHandle? = null
     private var ijkKernelPromptShown: Boolean = false
     private var autoUpdateCheckStarted: Boolean = false
+    private var resumePromptPopup: PopupHandle? = null
+    private var resumePromptShown: Boolean = false
     private var autoUpdatePromptShownVersion: String? = null
     private var pendingAutoUpdate: ApkUpdater.RemoteUpdate? = null
     private var autoUpdateCheckJob: Job? = null
@@ -222,6 +226,7 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
         showLastCrashPromptIfNeeded()
         showIjkKernelUpdatePromptIfNeeded()
         showAutoUpdatePromptIfReady()
+        maybeShowResumeOnLaunch()
     }
 
     override fun onPause() {
@@ -987,6 +992,66 @@ class MainActivity : BaseActivity(), SidebarFocusHost {
                     AppLog.w("Update", "auto check failed: ${t.message}", t)
                 }
             }
+    }
+
+    private fun maybeShowResumeOnLaunch() {
+        if (resumePromptShown) return
+        if (!BiliClient.prefs.resumeOnLaunchEnabled) return
+        if (!BiliClient.cookies.hasSessData()) return
+        if (!BiliClient.prefs.disclaimerAccepted) return
+        if (disclaimerPopup?.isShowing == true) return
+        if (crashPromptPopup?.isShowing == true) return
+        if (ijkKernelPromptPopup?.isShowing == true) return
+        if (pendingAutoUpdate != null || autoUpdatePromptPopup?.isShowing == true) return
+        resumePromptShown = true
+        lifecycleScope.launch {
+            val card = runCatching {
+                val page = BiliApi.historyCursor(ps = 1)
+                val first = page.items.firstOrNull() as? HistoryEntry.Video
+                first?.card
+            }.getOrNull() ?: return@launch
+            if (isFinishing || isDestroyed) return@launch
+            val title = card.title.ifBlank { "上次视频" }
+            val progressSec = card.progressSec ?: 0L
+            val totalSec = card.durationSec.toLong()
+            val timeText =
+                if (progressSec > 0 && totalSec > 0) {
+                    " ${formatTime(progressSec)} / ${formatTime(totalSec)}"
+                } else ""
+            resumePromptPopup =
+                AppPopup.confirm(
+                    context = this@MainActivity,
+                    title = "继续上次观看",
+                    message = "《$title》$timeText",
+                    positiveText = "接着看",
+                    negativeText = "取消",
+                    cancelable = true,
+                    onPositive = { openResumeCard(card) },
+                    onDismiss = { resumePromptPopup = null },
+                )
+            if (BiliClient.prefs.resumeOnLaunchAutoDismiss) {
+                binding.root.postDelayed({ resumePromptPopup?.dismiss() }, 3_000L)
+            }
+        }
+    }
+
+    private fun openResumeCard(card: VideoCard) {
+        val intent = Intent(this, blbl.cat3399.feature.player.PlayerActivity::class.java)
+        card.aid?.let { intent.putExtra(blbl.cat3399.feature.player.PlayerActivity.EXTRA_AID, it) }
+        card.epId?.let { intent.putExtra(blbl.cat3399.feature.player.PlayerActivity.EXTRA_EP_ID, it) }
+        card.seasonId?.let { intent.putExtra(blbl.cat3399.feature.player.PlayerActivity.EXTRA_SEASON_ID, it) }
+        card.progressSec?.takeIf { it >= 5L }?.let {
+            intent.putExtra(blbl.cat3399.feature.player.PlayerActivity.EXTRA_START_POSITION_MS, it * 1000L)
+        }
+        startActivity(intent)
+    }
+
+    private fun formatTime(sec: Long): String {
+        val s = sec.coerceAtLeast(0L)
+        val m = s / 60
+        val h = m / 60
+        return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m % 60, s % 60)
+        else String.format(Locale.US, "%d:%02d", m, s % 60)
     }
 
     private fun showAutoUpdatePromptIfReady() {

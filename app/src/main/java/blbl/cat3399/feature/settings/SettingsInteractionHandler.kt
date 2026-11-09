@@ -1727,6 +1727,20 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.ResumeOnLaunchEnabled -> {
+                val p = BiliClient.prefs
+                p.resumeOnLaunchEnabled = !p.resumeOnLaunchEnabled
+                AppToast.show(activity, "启动时提示继续上次观看：${if (p.resumeOnLaunchEnabled) "开" else "关"}")
+                renderer.refreshSection(entry.id)
+            }
+
+            SettingId.ResumeOnLaunchAutoDismiss -> {
+                val p = BiliClient.prefs
+                p.resumeOnLaunchAutoDismiss = !p.resumeOnLaunchAutoDismiss
+                AppToast.show(activity, "提示自动消失：${if (p.resumeOnLaunchAutoDismiss) "3 秒后自动关闭" else "需手动取消"}")
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.CheckUpdate -> ensureTestUpdateChecked(force = true, promptIfUpdate = true)
 
             SettingId.ProjectUrl -> showProjectDialog()
