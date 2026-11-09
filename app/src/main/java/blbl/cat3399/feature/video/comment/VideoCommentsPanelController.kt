@@ -200,20 +200,24 @@ internal class VideoCommentsPanelController(
         views.comments.adapter = commentsAdapter
         views.comments.layoutManager = LinearLayoutManager(context)
         // TV: 评论卡片获得焦点时滚动到中间位置
+        /**
+         * 焦点落在评论行时，把该行平滑滚到列表垂直中心。
+         * 注意：TV 遥控器的焦点可能落在卡片内部子控件上，
+         * 必须用 findContainingItemView 找回它属于的那一行，
+         * 直接用 view.top 会按父卡片算偏移，位置全错。
+         */
         fun RecyclerView.centerChildOnFocus() {
             addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
                 override fun onChildViewAttachedToWindow(view: android.view.View) {
                     view.onFocusChangeListener = android.view.View.OnFocusChangeListener { _, hasFocus ->
-                        if (hasFocus) {
-                            post {
-                                val rv = this@centerChildOnFocus
-                                val rvCenter = rv.height / 2
-                                val childCenter = view.top + view.height / 2
-                                val dy = childCenter - rvCenter
-                                if (kotlin.math.abs(dy) > rv.height / 6) {
-                                    rv.smoothScrollBy(0, dy)
-                                }
-                            }
+                        if (!hasFocus) return@OnFocusChangeListener
+                        val rv = this@centerChildOnFocus
+                        view.post {
+                            val row = rv.findContainingItemView(view) ?: return@post
+                            val rvCenter = rv.height / 2
+                            val rowCenter = row.top + row.height / 2
+                            val dy = rowCenter - rvCenter
+                            if (dy != 0) rv.smoothScrollBy(0, dy)
                         }
                     }
                 }
