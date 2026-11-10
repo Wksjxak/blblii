@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 鼠标悬停时不画焦点描边，避免 D-pad 焦点框和鼠标同时出现 -->
+    <item android:state_focused="true" android:state_hovered="true" android:color="#00000000" />
     <item android:color="@color/blbl_focus_white" android:state_focused="true" />
     <item android:color="?attr/blblAccent" android:state_selected="true" />
     <item android:color="@color/blbl_focus_white" android:state_pressed="true" />

@@ -1723,6 +1723,13 @@ class UpDetailActivity : BaseActivity() {
                     setColor(0x00000000)
                     setStroke((2 * resources.displayMetrics.density).toInt(), 0x66FFFFFF)
                 }
+            // 鼠标悬停时不画焦点描边：焦点框只给 D-pad 导航用
+            addState(
+                intArrayOf(android.R.attr.state_focused, android.R.attr.state_hovered),
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0x00000000)
+                },
+            )
             addState(intArrayOf(android.R.attr.state_focused), outline)
             addState(intArrayOf(), null)
         }
