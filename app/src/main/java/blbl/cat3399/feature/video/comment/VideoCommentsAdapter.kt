@@ -161,6 +161,14 @@ internal class VideoCommentsAdapter(
             binding.tvMessage.ellipsize = if (isExpanded) null else TextUtils.TruncateAt.END
             val commentTextSize = textSizeSpOverride ?: BiliClient.prefs.commentTextSizeSp
             binding.tvMessage.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, commentTextSize)
+            // 同一评论卡内的用户名 / 时间 / 点赞 / 「查看全部回复」也跟着评论字号走，
+            // 元信息比正文略小 2sp，避免整卡字号一样显得呆板
+            val metaTextSize = (commentTextSize - 2f).coerceAtLeast(10f)
+            binding.tvUser.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, commentTextSize)
+            binding.tvTime.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, metaTextSize)
+            binding.tvLike.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, metaTextSize)
+            binding.tvContextTag.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, metaTextSize)
+            binding.tvReply.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, metaTextSize)
             val blankFallback = if (item.pictures.isNotEmpty() || item.noteCvid > 0L) "" else "-"
             EmoteSpannable.setText(binding.tvMessage, item.message, item.emotes, blankFallback = blankFallback)
             updateExpandHint(itemRpid = item.rpid, isExpanded = isExpanded)
