@@ -158,6 +158,8 @@ class SearchInteractor(
             state.pagingForTab(i).reset()
             renderer.clearResultsForTab(i)
         }
+        state.resultsLoading = true
+        renderer.updateCurrentResultState()
 
         resetAndLoad()
         renderer.focusSelectedTabAfterShow()

@@ -9,6 +9,8 @@ class SearchState {
     var suggestKeywords: List<String> = emptyList()
     var hotKeywords: List<String> = emptyList()
     var resultsVisible: Boolean = false
+    /** 正在发搜索请求，结果区应显示「搜索中…」占位 */
+    var resultsLoading: Boolean = false
 
     var ignoreQueryTextChanges: Boolean = false
 

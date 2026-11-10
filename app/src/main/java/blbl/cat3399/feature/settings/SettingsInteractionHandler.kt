@@ -1489,12 +1489,6 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
-            SettingId.UpDynamicShowVideo -> {
-                prefs.upDynamicShowVideo = !prefs.upDynamicShowVideo
-                AppToast.show(activity, "UP动态栏显示投稿视频：${if (prefs.upDynamicShowVideo) "开" else "关"}")
-                renderer.refreshSection(entry.id)
-            }
-
             SettingId.DynamicDetailTextSize -> {
                 val options = listOf(14, 16, 18, 20, 22, 24, 26, 28, 30, 34, 38, 44)
                 showChoiceDialog(

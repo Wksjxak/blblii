@@ -568,6 +568,9 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun startArchiveSearch(query: String) {
+        // 新关键词一上来先清空投稿网格，配合顶部「正在搜索…」形成占位，
+        // 避免旧结果还留在屏幕上让人误以为没在搜
+        archiveAdapter.submit(emptyList())
         // 已加载的投稿先交给控制器做「秒出」过滤，网络结果回来再合并；
         // 拼音模式从「已覆盖过的整页」之后开始扫，避免重复请求同一批投稿
         val preloaded = archiveBrowseItems.toList()
@@ -1097,10 +1100,9 @@ class UpDetailActivity : BaseActivity() {
                 dynamicNextOffset = page.nextOffset
                 dynamicEndReached = page.nextOffset == null
 
-                val showVideos = BiliClient.prefs.upDynamicShowVideo
+                // 动态流里的视频是 UP 发动态时分享的视频，不是「投稿」，不再按设置过滤
                 val seen = HashSet<String>(loadedDynamicStableKeys)
                 val fresh = page.items.filter { item ->
-                    if (item is DynamicFeedItem.Video && !showVideos) return@filter false
                     val key = item.stableKey
                     if (!seen.add(key)) return@filter false
                     true

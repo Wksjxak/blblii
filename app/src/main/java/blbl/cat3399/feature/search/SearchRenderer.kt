@@ -674,6 +674,7 @@ class SearchRenderer internal constructor(
 
     fun onResultsApplied(isRefresh: Boolean) {
         binding.recyclerResults.postIfAlive(isAlive = { !released }) {
+            state.resultsLoading = false
             updateCurrentResultState()
             if (isRefresh && maybeConsumePendingFocusFirstResultCardAfterRefresh()) return@postIfAlive
             maybeConsumePendingResultFocus()
@@ -1012,11 +1013,15 @@ class SearchRenderer internal constructor(
         binding.swipeRefresh.visibility = View.VISIBLE
     }
 
-    private fun updateCurrentResultState() {
+    fun updateCurrentResultState() {
         val hasResults = (binding.recyclerResults.adapter?.itemCount ?: 0) > 0
         binding.swipeRefresh.visibility = View.VISIBLE
         binding.tvResultsPlaceholder.visibility = if (hasResults) View.GONE else View.VISIBLE
-        if (!hasResults) binding.tvResultsPlaceholder.text = viewContext.getString(R.string.search_no_results)
+        if (!hasResults) {
+            binding.tvResultsPlaceholder.text =
+                if (state.resultsLoading) "搜索中…"
+                else viewContext.getString(R.string.search_no_results)
+        }
     }
 
     fun clearResultsForTab(index: Int) {
