@@ -1100,9 +1100,15 @@ class UpDetailActivity : BaseActivity() {
                 dynamicNextOffset = page.nextOffset
                 dynamicEndReached = page.nextOffset == null
 
-                // 动态流里的视频是 UP 发动态时分享的视频，不是「投稿」，不再按设置过滤
+                // 设置项只隐藏「投稿同步视频」（动态流里和投稿 Tab 重复的 bvid）；
+                // 用户在动态里主动分享的视频 bvid 不在投稿集合里，一律保留
+                val hideArchiveVideo = BiliClient.prefs.upDynamicHideArchiveVideo
+                val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
                 val seen = HashSet<String>(loadedDynamicStableKeys)
                 val fresh = page.items.filter { item ->
+                    if (hideArchiveVideo && item is DynamicFeedItem.Video && item.card.bvid in archiveBvids) {
+                        return@filter false
+                    }
                     val key = item.stableKey
                     if (!seen.add(key)) return@filter false
                     true

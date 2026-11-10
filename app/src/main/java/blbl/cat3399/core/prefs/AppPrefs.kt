@@ -752,6 +752,12 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, false)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, value).apply()
 
+    /** UP 动态 Tab 是否隐藏「自动投稿视频动态」（UP 自己投的视频，动态流里和投稿 Tab 重复）。
+     * 注意：只隐藏和投稿列表重叠的 bvid，用户主动分享的动态视频不受影响。 */
+    var upDynamicHideArchiveVideo: Boolean
+        get() = prefs.getBoolean("up_dynamic_hide_archive_video", false)
+        set(value) = prefs.edit().putBoolean("up_dynamic_hide_archive_video", value).apply()
+
     /** 动态详情正文字号（sp），默认 20。 */
     var dynamicDetailTextSize: Float
         get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f).coerceIn(DYNAMIC_DETAIL_TEXT_SIZE_MIN, DYNAMIC_DETAIL_TEXT_SIZE_MAX)
