@@ -1916,13 +1916,14 @@ object BiliApi {
                 linkedMapOf("id" to dynId),
             )
             val json = BiliClient.getJson(url)
-            if (json.optInt("code", -1) != 0) return emptyList()
-            val data = json.optJSONObject("data") ?: return emptyList()
+            val code = json.optInt("code", -1)
+            val msg = json.optString("message", "")
+            val data = json.optJSONObject("data")
+            val arr = data?.optJSONArray("pics")
+                ?: data?.optJSONObject("item")?.optJSONArray("pics")
+            AppLog.d(TAG, "detailPic dyn=$dynId code=$code msg=$msg arrLen=${arr?.length() ?: -1}")
+            if (code != 0 || arr == null) return emptyList()
             val out = ArrayList<DynamicParagraph.Image>()
-            // data.pics[] 或 data.item.pics[]
-            val arr = data.optJSONArray("pics")
-                ?: data.optJSONObject("item")?.optJSONArray("pics")
-                ?: return emptyList()
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val u = o.optString("url", "")

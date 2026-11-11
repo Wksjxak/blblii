@@ -682,7 +682,12 @@ class UpDetailActivity : BaseActivity() {
             applyRecyclerForCurrentTab()
             // adapter 切换后，无论之前焦点在哪，都把焦点明确留在 Tab 行，
             // 不让 framework 自动把焦点落到新 recycler 的某个子项上。
-            requestFocusSelectedTabView()
+            val ok = requestFocusSelectedTabView()
+            AppLog.d(
+                "UpDetail",
+                "switchTab post tab=$next focusBefore=${currentFocus?.javaClass?.simpleName} " +
+                    "focusAfter=${currentFocus?.javaClass?.simpleName} requestTabOk=$ok",
+            )
             ensureTabLoadedIfNeeded()
         }
     }
