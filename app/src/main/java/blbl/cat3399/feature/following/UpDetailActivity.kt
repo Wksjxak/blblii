@@ -669,9 +669,19 @@ class UpDetailActivity : BaseActivity() {
         // (e.g. during generic motion scroll). Switching adapter/layout manager synchronously at that
         // moment can crash with "Cannot call removeView(At) within removeView(At)".
         val token = ++tabSwitchRequestToken
+        // 切 Tab 前清掉被刷新 Tab 的强制聚焦标记：避免动态刷新后切到投稿，
+        // 投稿数据回来时还拿着旧的 forceFocusTab / pendingFocus 标志，把第一个（甚至多个）item
+        // 自动 requestFocus 触发 stateListAnimator 缩放动画。
+        forceFocusTab = null
+        pendingFocusFirstArchiveItemAfterLoad = false
+        pendingFocusFirstDynamicItemAfterLoad = false
+        archiveGridController?.clearPendingFocusAfterLoadMore()
         binding.recycler.postIfAlive(isAlive = { !isFinishing && !isDestroyed }) {
             if (token != tabSwitchRequestToken) return@postIfAlive
             applyRecyclerForCurrentTab()
+            // adapter 切换后，无论之前焦点在哪，都把焦点明确留在 Tab 行，
+            // 不让 framework 自动把焦点落到新 recycler 的某个子项上。
+            requestFocusSelectedTabView()
             ensureTabLoadedIfNeeded()
         }
     }
@@ -1106,14 +1116,21 @@ class UpDetailActivity : BaseActivity() {
                 val hideArchiveVideo = BiliClient.prefs.upDynamicHideArchiveVideo
                 val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
                 val seen = HashSet<String>(loadedDynamicStableKeys)
+                var filteredCount = 0
                 val fresh = page.items.filter { item ->
                     if (hideArchiveVideo && item is DynamicFeedItem.Video && item.card.bvid in archiveBvids) {
+                        filteredCount++
                         return@filter false
                     }
                     val key = item.stableKey
                     if (!seen.add(key)) return@filter false
                     true
                 }
+                AppLog.d(
+                    "UpDetail",
+                    "dynamicFilter hide=$hideArchiveVideo archiveBvids=${archiveBvids.size} " +
+                        "pageItems=${page.items.size} filtered=$filteredCount fresh=${fresh.size}",
+                )
                 fresh.forEach { loadedDynamicStableKeys.add(it.stableKey) }
                 if (isRefresh) dynamicAdapter.submit(fresh) else dynamicAdapter.append(fresh)
 

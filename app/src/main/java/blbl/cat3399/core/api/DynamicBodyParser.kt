@@ -100,16 +100,32 @@ internal object DynamicBodyParser {
         if (modulesNode is JSONArray) {
             // opus/detail 返回的 modules 是数组：文字段、图片段、分割线可能分散在不同模块里，
             // 必须全部遍历合并，不能在第一个非空模块就 return。
+            val debugModules = ArrayList<String>()
             for (i in 0 until modulesNode.length()) {
                 val m = modulesNode.optJSONObject(i) ?: continue
-                val content = m.optJSONObject("module_content") ?: continue
+                val moduleType = m.optString("module_type", "?")
+                val content = m.optJSONObject("module_content")
+                debugModules.add(
+                    "$moduleType{contentKeys=${content?.keys()?.asSequence()?.joinToString(",").orEmpty()}}",
+                )
+                if (content == null) continue
                 content.optJSONArray("paragraphs")?.let { pars ->
                     out.addAll(parseOpusParagraphs(pars))
                 }
                 // 有些动态图片直接挂在 module_content.pics 上，不在 paragraphs 里
                 readPicsDirect(content).let { out.addAll(it) }
             }
-            if (out.isNotEmpty()) return out
+            if (out.isNotEmpty()) {
+                // 诊断：如果正文只有 1 段文字、没有图片，说明图片在别的字段里
+                val hasImage = out.any { it is DynamicParagraph.Image }
+                if (!hasImage && out.count { it is DynamicParagraph.Text } <= 1) {
+                    AppLog.d(
+                        "DynamicBodyParser",
+                        "arrayBodyNoImage modules=${debugModules.joinToString("|")}",
+                    )
+                }
+                return out
+            }
         }
 
         if (modulesNode is JSONObject) {
@@ -149,15 +165,44 @@ internal object DynamicBodyParser {
         return out
     }
 
-    /** 从 module_content 直接读 pics[]（不在 paragraphs 里的图片，比如单图动态） */
+    /**
+     * 从 module_content 直接读图片。
+     * opus/detail 的数组形态下，图片可能挂在 pics / pic / image_url / urls 等不同字段，
+     * 这里穷举常见字段 + 递归扫一层对象，避免漏图。
+     */
     private fun readPicsDirect(content: JSONObject): List<DynamicParagraph.Image> {
-        val arr = content.optJSONArray("pics") ?: return emptyList()
         val out = ArrayList<DynamicParagraph.Image>()
-        for (k in 0 until arr.length()) {
-            val o = arr.optJSONObject(k) ?: continue
-            val u = o.optString("url", "").ifBlank { o.optString("src", "") }
-                .ifBlank { o.optString("item", "") }
+        fun fromUrlsArray(arr: JSONArray?) {
+            arr ?: return
+            for (i in 0 until arr.length()) {
+                when (val el = arr.opt(i)) {
+                    is String -> if (el.startsWith("http")) out.add(DynamicParagraph.Image(el))
+                    is JSONObject -> {
+                        val u = el.optString("url", "").ifBlank { el.optString("src", "") }
+                            .ifBlank { el.optString("image", "") }
+                            .ifBlank { el.optString("img_src", "") }
+                        if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+                    }
+                }
+            }
+        }
+        fromUrlsArray(content.optJSONArray("pics"))
+        fromUrlsArray(content.optJSONArray("images"))
+        fromUrlsArray(content.optJSONArray("urls"))
+        content.optJSONObject("pic")?.let { pic ->
+            val u = pic.optString("url", "").ifBlank { pic.optString("src", "") }
             if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+            else fromUrlsArray(pic.optJSONArray("urls"))
+        }
+        content.optJSONObject("image")?.let { img ->
+            val u = img.optString("url", "").ifBlank { img.optString("src", "") }
+            if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+        }
+        content.optString("image_url", "").takeIf { it.startsWith("http") }?.let {
+            out.add(DynamicParagraph.Image(it))
+        }
+        content.optString("cover", "").takeIf { it.startsWith("http") }?.let {
+            out.add(DynamicParagraph.Image(it))
         }
         return out
     }
