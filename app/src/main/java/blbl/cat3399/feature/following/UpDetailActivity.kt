@@ -1761,7 +1761,13 @@ class UpDetailActivity : BaseActivity() {
             when (para) {
                 is DynamicParagraph.Text -> {
                     val tv = android.widget.TextView(this)
-                    tv.text = para.text
+                    // 正文里出现的 BV 号染蓝，可点（TV 遥控器 OK / 鼠标）直接跳视频
+                    blbl.cat3399.core.util.BvLinkify.apply(
+                        tv,
+                        para.text,
+                        linkColor = 0xFF9FD6FF.toInt(),
+                    )
+                    if (tv.text.isNullOrBlank()) tv.text = para.text
                     tv.setTextColor(if (para.isHeading) 0xFF9FD6FF.toInt() else android.graphics.Color.WHITE)
                     tv.textSize = if (para.isHeading) {
                         BiliClient.prefs.dynamicDetailTextSize + 2f
