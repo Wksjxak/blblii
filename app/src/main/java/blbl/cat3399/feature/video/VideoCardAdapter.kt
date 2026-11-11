@@ -296,6 +296,14 @@ class VideoCardAdapter(
         ) {
             applyFixedSizing()
 
+            // RecyclerView 复用 / adapter 切换时，被回收的卡片可能残留上一次焦点动画留下的
+            // scale（stateListAnimator 在 view 已 detach 时不会回放 1.0）。这里在非焦点态
+            // 强制复位，避免「多条卡片异常放大」。
+            if (!binding.root.isFocused) {
+                binding.root.scaleX = 1f
+                binding.root.scaleY = 1f
+            }
+
             binding.root.isSelected = isSelected?.invoke(item, position) == true
 
             val watchProgressUi = buildWatchProgressUi(item)

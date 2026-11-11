@@ -78,6 +78,11 @@ class UpDynamicAdapter(
         private val onClick: (VideoCard) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: VideoCard) {
+            // 复用时清掉上一次焦点动画残留的 scale，避免卡片异常放大
+            if (!binding.root.isFocused) {
+                binding.root.scaleX = 1f
+                binding.root.scaleY = 1f
+            }
             binding.tvTitle.text = item.title
             val subtitle = if (item.ownerName.isBlank()) "" else "UP ${item.ownerName}"
             binding.tvSubtitle.text = subtitle

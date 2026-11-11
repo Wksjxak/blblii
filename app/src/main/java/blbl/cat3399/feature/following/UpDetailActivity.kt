@@ -1089,6 +1089,12 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun resetAndLoadDynamic() {
+        // 已有请求在飞时不再重复发起：切 Tab 的 ensureTabLoadedIfNeeded 与刷新可能同时命中，
+        // 两次都会清 offset 再用同一个 offset 请求，日志里能看到相同 offset 请求两遍。
+        if (dynamicIsLoadingMore) {
+            AppLog.d("UpDetail", "resetAndLoadDynamic skipped: already loading")
+            return
+        }
         if (forceFocusTab == UpTab.DYNAMIC) {
             pendingFocusFirstDynamicItemAfterLoad = true
             parkFocusInRecyclerForDataSetReset()
@@ -2014,7 +2020,20 @@ class UpDetailActivity : BaseActivity() {
             }.onSuccess { paras ->
                 AppLog.d("UpDetail", "dynamicDetail ok dyn=${item.dynId} paras=${paras.size}")
                 if (paras.isNotEmpty()) {
-                    bodyParas = paras
+                    val detailHasImage = paras.any { it is DynamicParagraph.Image }
+                    val initialHasImage = initialParas.any { it is DynamicParagraph.Image }
+                    bodyParas =
+                        if (!detailHasImage && initialHasImage) {
+                            // 详情解析漏图：保留详情文字段，再补上列表已解析出的图片
+                            AppLog.d(
+                                "UpDetail",
+                                "dynamicDetail mergeImages dyn=${item.dynId} " +
+                                    "detail=${paras.size} initialImages=${initialParas.count { it is DynamicParagraph.Image }}",
+                            )
+                            paras + initialParas.filterIsInstance<DynamicParagraph.Image>()
+                        } else {
+                            paras
+                        }
                     if (container.isAttachedToWindow) runOnUiThread { rerender() }
                 }
             }.onFailure { t ->

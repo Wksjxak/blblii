@@ -35,13 +35,39 @@ internal object DynamicBodyParser {
 
         fun readPics(container: JSONObject?): List<String> {
             if (container == null) return emptyList()
-            val pics = container.optJSONArray("pics") ?: return emptyList()
             val urls = ArrayList<String>()
-            for (pi in 0 until pics.length()) {
-                val o = pics.optJSONObject(pi) ?: continue
-                val u = o.optString("url", "").ifBlank { o.optString("src", "") }
-                    .ifBlank { o.optString("item", "") }
+
+            fun fromArray(arr: JSONArray?) {
+                arr ?: return
+                for (i in 0 until arr.length()) {
+                    when (val el = arr.opt(i)) {
+                        is String -> if (el.startsWith("http")) urls.add(el)
+                        is JSONObject -> {
+                            val u = el.optString("url", "")
+                                .ifBlank { el.optString("src", "") }
+                                .ifBlank { el.optString("item", "") }
+                                .ifBlank { el.optString("img_src", "") }
+                            if (u.isNotBlank()) urls.add(u)
+                        }
+                    }
+                }
+            }
+
+            fromArray(container.optJSONArray("pics"))
+            fromArray(container.optJSONArray("images"))
+            fromArray(container.optJSONArray("urls"))
+
+            if (urls.isEmpty()) {
+                val u = container.optString("url", "")
+                    .ifBlank { container.optString("src", "") }
+                    .ifBlank { container.optString("img_src", "") }
                 if (u.isNotBlank()) urls.add(u)
+            }
+            if (urls.isEmpty()) {
+                container.optString("image_url", "").takeIf { it.startsWith("http") }?.let { urls.add(it) }
+            }
+            if (urls.isEmpty()) {
+                container.optString("cover", "").takeIf { it.startsWith("http") }?.let { urls.add(it) }
             }
             return urls
         }
@@ -74,16 +100,13 @@ internal object DynamicBodyParser {
                     if (code.isNotBlank()) out.add(DynamicParagraph.Text(code))
                 }
                 else -> {
-                    // 兼容没有 para_type 的响应
+                    // 兼容没有 para_type 的响应：文字读完还要继续尝试读图
                     val t = readNodes(para.optJSONObject("text")?.optJSONArray("nodes"))
-                    if (t.isNotBlank()) {
-                        out.add(DynamicParagraph.Text(t))
-                        continue
-                    }
+                    if (t.isNotBlank()) out.add(DynamicParagraph.Text(t))
                     var imgs = readPics(para.optJSONObject("pic"))
                     if (imgs.isEmpty()) imgs = readPics(para.optJSONObject("pics"))
                     imgs.forEach { out.add(DynamicParagraph.Image(it)) }
-                    if (imgs.isEmpty() && para.optJSONObject("line") != null) {
+                    if (t.isBlank() && imgs.isEmpty() && para.optJSONObject("line") != null) {
                         out.add(DynamicParagraph.Separator)
                     }
                 }

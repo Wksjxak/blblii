@@ -1909,23 +1909,27 @@ object BiliApi {
     }
 
     /** 动态图片专用接口：/x/polymer/web-dynamic/v1/detail/pic?id=
-     *  data 本身就是数组，每项字段是 src（不是 url）。 */
+     *  data 本身就是数组，每项字段是 src（不是 url）。
+     *  该接口对鉴权敏感，先走 wbi 签名，失败再回退裸 query。 */
     private suspend fun loadDetailPics(dynId: String): List<DynamicParagraph.Image> {
-        return runCatching {
-            val url = BiliClient.withQuery(
-                "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail/pic",
-                linkedMapOf("id" to dynId),
-            )
-            val json = BiliClient.getJson(url)
+        val path = "/x/polymer/web-dynamic/v1/detail/pic"
+        val base = "https://api.bilibili.com$path"
+        // dyn_id 必须按字符串原样传，19 位 ID 走 number 会丢精度
+        val params = linkedMapOf("id" to dynId)
+        val headers = linkedMapOf(
+            "Referer" to "https://www.bilibili.com/",
+        )
+
+        fun parse(json: JSONObject, tag: String): List<DynamicParagraph.Image> {
             val code = json.optInt("code", -1)
-            val msg = json.optString("message", "")
+            val msg = json.optString("message", json.optString("msg", ""))
             // data 直接是图片数组；个别情况可能套在 data.pics / data.item.pics 里
             val arr = when (val d = json.opt("data")) {
                 is JSONArray -> d
                 is JSONObject -> d.optJSONArray("pics") ?: d.optJSONObject("item")?.optJSONArray("pics")
                 else -> null
             }
-            AppLog.d(TAG, "detailPic dyn=$dynId code=$code msg=$msg arrLen=${arr?.length() ?: -1}")
+            AppLog.d(TAG, "detailPic[$tag] dyn=$dynId code=$code msg=$msg arrLen=${arr?.length() ?: -1}")
             if (code != 0 || arr == null) return emptyList()
             val out = ArrayList<DynamicParagraph.Image>()
             for (i in 0 until arr.length()) {
@@ -1935,7 +1939,26 @@ object BiliApi {
                     .ifBlank { o.optString("img_src", "") }
                 if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
             }
-            out
+            return out
+        }
+
+        // 1) wbi 签名
+        runCatching {
+            val keys = BiliClient.ensureWbiKeys()
+            val url = BiliClient.signedWbiUrlAbsolute(base, params, keys)
+            AppLog.d(TAG, "detailPic[wbi] url=$url referer=${headers["Referer"]} cookies=auto")
+            val json = BiliClient.getJson(url, headers = headers)
+            val pics = parse(json, "wbi")
+            if (pics.isNotEmpty()) return pics
+        }.onFailure { t ->
+            AppLog.w(TAG, "detailPic[wbi] dyn=$dynId failed: ${t.message}")
+        }
+
+        // 2) 裸 query 兜底
+        return runCatching {
+            val url = BiliClient.withQuery(base, params)
+            AppLog.d(TAG, "detailPic[plain] url=$url referer=${headers["Referer"]} cookies=auto")
+            parse(BiliClient.getJson(url, headers = headers), "plain")
         }.getOrDefault(emptyList())
     }
 
