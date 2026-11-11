@@ -1900,18 +1900,44 @@ object BiliApi {
             }
 
             if (text.isBlank() && images.isEmpty() && title.isNullOrBlank()) {
-                // 诊断：把可能藏图/藏字的字段都打出来，下次直接知道走哪条路径
+                // 全方位诊断：major 每个子对象的大小/首字段都打出来，并把整段 major 截断 dump
                 val draw = major?.optJSONObject("draw")
                 val drawItems = draw?.optJSONArray("items")?.length() ?: -1
                 val drawSample = draw?.optJSONArray("items")?.optJSONObject(0)?.keys()?.asSequence()?.joinToString(",").orEmpty()
                 val opusKeys = major?.optJSONObject("opus")?.keys()?.asSequence()?.joinToString(",").orEmpty()
+                // 枚举 major 下每个子对象：key、类型、长度/键集合
+                val majorBreakdown = StringBuilder()
+                if (major != null) {
+                    val it2 = major.keys()
+                    while (it2.hasNext()) {
+                        val k = it2.next()
+                        val v = major.opt(k)
+                        val desc3 = when (v) {
+                            is JSONObject -> "obj{${v.keys().asSequence().take(8).joinToString(",")}}"
+                            is org.json.JSONArray -> "arr[${v.length()}]"
+                            is String -> "str(len=${v.length})"
+                            is Number -> "num($v)"
+                            else -> v?.javaClass?.simpleName ?: "null"
+                        }
+                        if (majorBreakdown.isNotEmpty()) majorBreakdown.append(' ')
+                        majorBreakdown.append("$k=$desc3")
+                    }
+                }
+                // desc 全文（截断 500）
+                val descFull = moduleDynamic.optJSONObject("desc")?.optString("text", "").orEmpty()
+                    .let { if (it.length > 500) it.take(500) + "…(${it.length})" else it }
+                // major 原始 JSON 截断 dump（最多 1500 字符）
+                val majorDump = major?.toString().orEmpty().let {
+                    if (it.length > 1500) it.take(1500) + "…(${it.length})" else it
+                }
                 AppLog.d(
                     TAG,
                     "feedDrop type=${it.optString("type", "")} " +
-                        "majorKeys=${major?.keys()?.asSequence()?.joinToString(",").orEmpty()} " +
                         "modulesKeys=${modules.keys().asSequence().joinToString(",")} " +
-                        "drawItems=$drawItems drawItemKeys=[$drawSample] opusKeys=[$opusKeys] " +
-                        "descLen=${moduleDynamic.optJSONObject("desc")?.optString("text", "").orEmpty().length}",
+                        "drawItems=$drawItems drawItemKeys=[$drawSample] opusKeys=[$opusKeys]\n" +
+                        "majorBreakdown: $majorBreakdown\n" +
+                        "descText: [$descFull]\n" +
+                        "majorDump: $majorDump",
                 )
             }
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
