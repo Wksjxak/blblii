@@ -672,6 +672,7 @@ class UpDetailActivity : BaseActivity() {
         // 切 Tab 前清掉被刷新 Tab 的强制聚焦标记：避免动态刷新后切到投稿，
         // 投稿数据回来时还拿着旧的 forceFocusTab / pendingFocus 标志，把第一个（甚至多个）item
         // 自动 requestFocus 触发 stateListAnimator 缩放动画。
+        AppLog.d("UpDetail", "switchTab -> $next oldForce=$forceFocusTab")
         forceFocusTab = null
         pendingFocusFirstArchiveItemAfterLoad = false
         pendingFocusFirstDynamicItemAfterLoad = false
@@ -1131,6 +1132,12 @@ class UpDetailActivity : BaseActivity() {
                     "dynamicFilter hide=$hideArchiveVideo archiveBvids=${archiveBvids.size} " +
                         "pageItems=${page.items.size} filtered=$filteredCount fresh=${fresh.size}",
                 )
+                if (hideArchiveVideo) {
+                    val kept = fresh.filterIsInstance<DynamicFeedItem.Video>().map { it.card.bvid }
+                    if (kept.isNotEmpty()) {
+                        AppLog.d("UpDetail", "dynamicFilter keptVideos=$kept")
+                    }
+                }
                 fresh.forEach { loadedDynamicStableKeys.add(it.stableKey) }
                 if (isRefresh) dynamicAdapter.submit(fresh) else dynamicAdapter.append(fresh)
 
@@ -1449,6 +1456,7 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun focusGridAt(position: Int) {
+        AppLog.d("UpDetail", "focusGridAt pos=$position tab=$currentTab caller=${Throwable().stackTrace[2]}")
         val recycler = binding.recycler
         recycler.post outer@{
             if (isFinishing || isDestroyed) return@outer

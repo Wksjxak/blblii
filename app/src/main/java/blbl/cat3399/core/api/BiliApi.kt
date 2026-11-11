@@ -1851,7 +1851,18 @@ object BiliApi {
             if (code == 0 && item != null) {
                 val paras = DynamicBodyParser.extractParagraphsFromItem(item)
                 AppLog.d(TAG, "opusDetail dyn=$dynId code=$code paras=${paras.size}")
-                if (paras.isNotEmpty()) return paras
+                if (paras.isNotEmpty()) {
+                    // 正文有了但没图时，兜底调 detail/pic 接口补图（有些图文动态图不在 paragraphs 里）
+                    val hasImage = paras.any { it is DynamicParagraph.Image }
+                    if (!hasImage) {
+                        val pics = loadDetailPics(dynId)
+                        if (pics.isNotEmpty()) {
+                            AppLog.d(TAG, "opusDetail picsFallback dyn=$dynId pics=${pics.size}")
+                            return paras + pics
+                        }
+                    }
+                    return paras
+                }
             } else {
                 AppLog.w(TAG, "opusDetail dyn=$dynId code=$code msg=${json.optString("message", "")}")
             }
@@ -1884,8 +1895,43 @@ object BiliApi {
                 "detailEmptyBody dyn=$dynId itemKeys=${item.keys().asSequence().joinToString(",")} " +
                     "modulesType=${if (mods is JSONArray) "array" else if (mods is JSONObject) "object" else "none"}",
             )
+        } else {
+            val hasImage = paras.any { it is DynamicParagraph.Image }
+            if (!hasImage) {
+                val pics = loadDetailPics(dynId)
+                if (pics.isNotEmpty()) {
+                    AppLog.d(TAG, "detailFallback picsFallback dyn=$dynId pics=${pics.size}")
+                    return paras + pics
+                }
+            }
         }
         return paras
+    }
+
+    /** 动态图片专用接口：/x/polymer/web-dynamic/v1/detail/pic?id= */
+    private suspend fun loadDetailPics(dynId: String): List<DynamicParagraph.Image> {
+        return runCatching {
+            val url = BiliClient.withQuery(
+                "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail/pic",
+                linkedMapOf("id" to dynId),
+            )
+            val json = BiliClient.getJson(url)
+            if (json.optInt("code", -1) != 0) return emptyList()
+            val data = json.optJSONObject("data") ?: return emptyList()
+            val out = ArrayList<DynamicParagraph.Image>()
+            // data.pics[] 或 data.item.pics[]
+            val arr = data.optJSONArray("pics")
+                ?: data.optJSONObject("item")?.optJSONArray("pics")
+                ?: return emptyList()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val u = o.optString("url", "")
+                    .ifBlank { o.optString("src", "") }
+                    .ifBlank { o.optString("img_src", "") }
+                if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
+            }
+            out
+        }.getOrDefault(emptyList())
     }
 
 
