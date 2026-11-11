@@ -171,6 +171,12 @@ internal class VideoCommentsAdapter(
             binding.tvReply.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, metaTextSize)
             val blankFallback = if (item.pictures.isNotEmpty() || item.noteCvid > 0L) "" else "-"
             EmoteSpannable.setText(binding.tvMessage, item.message, item.emotes, blankFallback = blankFallback)
+            // 评论里出现 BV 号时染蓝；聚焦整张卡双击（OK / 鼠标）跳到对应视频
+            blbl.cat3399.core.util.BvLinkify.installDoubleTapJump(
+                binding.root,
+                item.message,
+                linkColor = 0xFF9FD6FF.toInt(),
+            )
             updateExpandHint(itemRpid = item.rpid, isExpanded = isExpanded)
             bindPictures(item, onPictureClick)
 

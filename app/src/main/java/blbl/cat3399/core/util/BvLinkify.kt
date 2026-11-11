@@ -2,38 +2,37 @@ package blbl.cat3399.core.util
 
 import android.content.Context
 import android.content.Intent
-import android.text.Spannable
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
+import android.view.KeyEvent
+import android.view.View
 import android.widget.TextView
 import blbl.cat3399.feature.video.VideoDetailActivity
 
 /**
  * 正文中的 BV 号识别：
- * - 命中的 BV 染成主题蓝；
- * - 整段文字可点（TV 遥控器 OK / 鼠标点击）即跳到对应视频。
+ * - 命中的 BV 染成主题蓝（视觉提示）；
+ * - TV 上「聚焦这一段/这条评论，500ms 内连按两次 OK」才跳视频，
+ *   第一次按不拦截，照常走原本的展开/楼中楼点击，避免冲突。
  */
 object BvLinkify {
-    // BV + 10 位 base58 字符，前后不贴身字符，避免把长链接里的片段误截
     private val BV_REGEX = Regex("(?<![A-Za-z0-9])(BV[0-9A-Za-z]{10})(?![A-Za-z0-9])")
+
+    private const val DOUBLE_TAP_MS = 500L
 
     fun firstBv(text: String): String? = BV_REGEX.find(text)?.value
 
-    /** 把 text 里的 BV 染蓝。 */
-    fun highlight(text: String, linkColor: Int): Spannable {
-        val sp = SpannableString(text)
+    fun highlight(text: String, linkColor: Int): android.text.Spannable {
+        val sp = android.text.SpannableString(text)
         for (m in BV_REGEX.findAll(text)) {
             sp.setSpan(
-                ForegroundColorSpan(linkColor),
+                android.text.style.ForegroundColorSpan(linkColor),
                 m.range.first,
                 m.range.last + 1,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
             )
         }
         return sp
     }
 
-    /** 跳转到视频详情。 */
     fun jump(context: Context, bvid: String) {
         val intent = Intent(context, VideoDetailActivity::class.java)
             .putExtra(VideoDetailActivity.EXTRA_BVID, bvid)
@@ -42,13 +41,33 @@ object BvLinkify {
     }
 
     /**
-     * 一键给 TextView 上色 + 点击跳第一个 BV。
-     * @return 文本里有没有 BV
+     * 给 [view] 装「双击 OK 跳 BV」：
+     * - 遥控器 DPAD_CENTER / ENTER 在 500ms 内第二次抬起时吃掉并跳视频；
+     * - 第一次抬起不拦截，view 自己的 onClick 正常触发；
+     * - 没有 BV 返回 false，不动 TextView 的文本。
      */
-    fun apply(tv: TextView, text: String, linkColor: Int): Boolean {
+    fun installDoubleTapJump(view: View, text: String, linkColor: Int): Boolean {
         val bv = firstBv(text) ?: return false
-        tv.text = highlight(text, linkColor)
-        tv.setOnClickListener { jump(tv.context, bv) }
+        if (view is TextView) {
+            view.text = highlight(text, linkColor)
+        }
+        var lastTriggerMs = 0L
+        view.setOnKeyListener { _, keyCode, event ->
+            val isCenter = keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+            if (!isCenter) return@setOnKeyListener false
+            if (event.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastTriggerMs <= DOUBLE_TAP_MS) {
+                lastTriggerMs = 0L
+                jump(view.context, bv)
+                true
+            } else {
+                lastTriggerMs = now
+                false
+            }
+        }
         return true
     }
 }
