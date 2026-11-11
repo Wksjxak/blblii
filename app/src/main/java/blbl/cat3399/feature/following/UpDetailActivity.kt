@@ -137,7 +137,8 @@ class UpDetailActivity : BaseActivity() {
 
     private var pendingFocusFirstArchiveItemAfterLoad: Boolean = false
     private var pendingFocusFirstSectionItemAfterLoad: Boolean = false
-    private var forceFocusFirstContentAfterRefresh: Boolean = false
+    /** 下拉刷新后需要强制聚焦第一条的 tab（只认这次刷新的那个 tab，避免串到别的 tab） */
+    private var forceFocusTab: UpTab? = null
     private var archiveGridController: DpadGridController? = null
     private var focusListener: android.view.ViewTreeObserver.OnGlobalFocusChangeListener? = null
     private var didRequestInitialTab0Focus: Boolean = false
@@ -811,11 +812,11 @@ class UpDetailActivity : BaseActivity() {
             return
         }
         if (!initial) {
-            forceFocusFirstContentAfterRefresh = true
+            forceFocusTab = currentTab
             binding.swipeRefresh.isRefreshing = true
         }
         // Avoid framework fallback focus during adapter resets.
-        if (forceFocusFirstContentAfterRefresh) {
+        if (forceFocusTab == currentTab) {
             when (currentTab) {
                 UpTab.ARCHIVE -> archiveGridController?.parkFocusForDataSetReset()
                 UpTab.DYNAMIC -> {
@@ -991,7 +992,7 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun resetAndLoadArchive() {
-        if (forceFocusFirstContentAfterRefresh) {
+        if (forceFocusTab == UpTab.ARCHIVE) {
             pendingFocusFirstArchiveItemAfterLoad = true
             archiveGridController?.parkFocusForDataSetReset()
         } else {
@@ -1062,7 +1063,7 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun resetAndLoadDynamic() {
-        if (forceFocusFirstContentAfterRefresh) {
+        if (forceFocusTab == UpTab.DYNAMIC) {
             pendingFocusFirstDynamicItemAfterLoad = true
             parkFocusInRecyclerForDataSetReset()
         } else {
@@ -1132,7 +1133,7 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun resetAndLoadSeasonsSeries() {
-        if (forceFocusFirstContentAfterRefresh) {
+        if (forceFocusTab == UpTab.COLLECTION_SERIES) {
             pendingFocusFirstSectionItemAfterLoad = true
             parkFocusInRecyclerForDataSetReset()
         } else {
@@ -1488,7 +1489,7 @@ class UpDetailActivity : BaseActivity() {
     private fun maybeConsumePendingFocusFirstContentAfterLoad() {
         if (!hasWindowFocus()) return
 
-        val force = forceFocusFirstContentAfterRefresh
+        val force = forceFocusTab == currentTab
         if (!force) {
             val focused = currentFocus
             if (focused != null && focused != binding.recycler && FocusTreeUtils.isDescendantOf(focused, binding.recycler)) {
@@ -1503,7 +1504,7 @@ class UpDetailActivity : BaseActivity() {
                 if (!force && !pendingFocusFirstArchiveItemAfterLoad) return
                 if (archiveAdapter.itemCount <= 0) return
                 pendingFocusFirstArchiveItemAfterLoad = false
-                forceFocusFirstContentAfterRefresh = false
+                forceFocusTab = null
                 focusGridAt(0)
             }
 
@@ -1511,7 +1512,7 @@ class UpDetailActivity : BaseActivity() {
                 if (!force && !pendingFocusFirstDynamicItemAfterLoad) return
                 if (dynamicAdapter.itemCount <= 0) return
                 pendingFocusFirstDynamicItemAfterLoad = false
-                forceFocusFirstContentAfterRefresh = false
+                forceFocusTab = null
                 focusGridAt(0)
             }
 
@@ -1519,7 +1520,7 @@ class UpDetailActivity : BaseActivity() {
                 if (!force && !pendingFocusFirstSectionItemAfterLoad) return
                 if (seasonsSeriesSections.isEmpty()) return
                 pendingFocusFirstSectionItemAfterLoad = false
-                forceFocusFirstContentAfterRefresh = false
+                forceFocusTab = null
                 focusFirstSectionVideo()
             }
         }
