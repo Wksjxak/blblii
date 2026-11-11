@@ -98,12 +98,18 @@ internal object DynamicBodyParser {
         val modulesNode = item.opt("modules")
 
         if (modulesNode is JSONArray) {
+            // opus/detail 返回的 modules 是数组：文字段、图片段、分割线可能分散在不同模块里，
+            // 必须全部遍历合并，不能在第一个非空模块就 return。
             for (i in 0 until modulesNode.length()) {
                 val m = modulesNode.optJSONObject(i) ?: continue
-                val pars = m.optJSONObject("module_content")?.optJSONArray("paragraphs") ?: continue
-                out.addAll(parseOpusParagraphs(pars))
-                if (out.isNotEmpty()) return out
+                val content = m.optJSONObject("module_content") ?: continue
+                content.optJSONArray("paragraphs")?.let { pars ->
+                    out.addAll(parseOpusParagraphs(pars))
+                }
+                // 有些动态图片直接挂在 module_content.pics 上，不在 paragraphs 里
+                readPicsDirect(content).let { out.addAll(it) }
             }
+            if (out.isNotEmpty()) return out
         }
 
         if (modulesNode is JSONObject) {
@@ -139,6 +145,19 @@ internal object DynamicBodyParser {
                     }
                 }
             }
+        }
+        return out
+    }
+
+    /** 从 module_content 直接读 pics[]（不在 paragraphs 里的图片，比如单图动态） */
+    private fun readPicsDirect(content: JSONObject): List<DynamicParagraph.Image> {
+        val arr = content.optJSONArray("pics") ?: return emptyList()
+        val out = ArrayList<DynamicParagraph.Image>()
+        for (k in 0 until arr.length()) {
+            val o = arr.optJSONObject(k) ?: continue
+            val u = o.optString("url", "").ifBlank { o.optString("src", "") }
+                .ifBlank { o.optString("item", "") }
+            if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
         }
         return out
     }
