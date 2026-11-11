@@ -1900,11 +1900,18 @@ object BiliApi {
             }
 
             if (text.isBlank() && images.isEmpty() && title.isNullOrBlank()) {
+                // 诊断：把可能藏图/藏字的字段都打出来，下次直接知道走哪条路径
+                val draw = major?.optJSONObject("draw")
+                val drawItems = draw?.optJSONArray("items")?.length() ?: -1
+                val drawSample = draw?.optJSONArray("items")?.optJSONObject(0)?.keys()?.asSequence()?.joinToString(",").orEmpty()
+                val opusKeys = major?.optJSONObject("opus")?.keys()?.asSequence()?.joinToString(",").orEmpty()
                 AppLog.d(
                     TAG,
                     "feedDrop type=${it.optString("type", "")} " +
                         "majorKeys=${major?.keys()?.asSequence()?.joinToString(",").orEmpty()} " +
-                        "modulesKeys=${modules.keys().asSequence().joinToString(",")}",
+                        "modulesKeys=${modules.keys().asSequence().joinToString(",")} " +
+                        "drawItems=$drawItems drawItemKeys=[$drawSample] opusKeys=[$opusKeys] " +
+                        "descLen=${moduleDynamic.optJSONObject("desc")?.optString("text", "").orEmpty().length}",
                 )
             }
             if (text.isNotBlank() || images.isNotEmpty() || !title.isNullOrBlank()) {
