@@ -1908,7 +1908,8 @@ object BiliApi {
         return paras
     }
 
-    /** 动态图片专用接口：/x/polymer/web-dynamic/v1/detail/pic?id= */
+    /** 动态图片专用接口：/x/polymer/web-dynamic/v1/detail/pic?id=
+     *  data 本身就是数组，每项字段是 src（不是 url）。 */
     private suspend fun loadDetailPics(dynId: String): List<DynamicParagraph.Image> {
         return runCatching {
             val url = BiliClient.withQuery(
@@ -1918,16 +1919,19 @@ object BiliApi {
             val json = BiliClient.getJson(url)
             val code = json.optInt("code", -1)
             val msg = json.optString("message", "")
-            val data = json.optJSONObject("data")
-            val arr = data?.optJSONArray("pics")
-                ?: data?.optJSONObject("item")?.optJSONArray("pics")
+            // data 直接是图片数组；个别情况可能套在 data.pics / data.item.pics 里
+            val arr = when (val d = json.opt("data")) {
+                is JSONArray -> d
+                is JSONObject -> d.optJSONArray("pics") ?: d.optJSONObject("item")?.optJSONArray("pics")
+                else -> null
+            }
             AppLog.d(TAG, "detailPic dyn=$dynId code=$code msg=$msg arrLen=${arr?.length() ?: -1}")
             if (code != 0 || arr == null) return emptyList()
             val out = ArrayList<DynamicParagraph.Image>()
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                val u = o.optString("url", "")
-                    .ifBlank { o.optString("src", "") }
+                val u = o.optString("src", "")
+                    .ifBlank { o.optString("url", "") }
                     .ifBlank { o.optString("img_src", "") }
                 if (u.isNotBlank()) out.add(DynamicParagraph.Image(u))
             }
