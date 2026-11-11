@@ -1855,6 +1855,11 @@ object BiliApi {
                     }
                     // 列表接口已带回完整 paragraphs（图文混排的顺序信息只在这里有）
                     paragraphs.addAll(DynamicBodyParser.parseOpusParagraphs(opus.optJSONArray("paragraphs")))
+                    // 列表接口对短图文动态不带 paragraphs，文字直接挂在 summary.text 上
+                    // （opus.title 可能为空、desc 又不存在），不补读就会被当成空卡丢掉
+                    if (text.isBlank()) {
+                        text = opus.optJSONObject("summary")?.optString("text", "").orEmpty().trim()
+                    }
                 }
                 val draw = m.optJSONObject("draw")
                 if (draw != null) {
