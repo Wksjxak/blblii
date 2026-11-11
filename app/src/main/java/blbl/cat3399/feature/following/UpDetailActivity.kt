@@ -679,15 +679,25 @@ class UpDetailActivity : BaseActivity() {
         archiveGridController?.clearPendingFocusAfterLoadMore()
         binding.recycler.postIfAlive(isAlive = { !isFinishing && !isDestroyed }) {
             if (token != tabSwitchRequestToken) return@postIfAlive
+            // 切 adapter 期间 BLOCK_DESCENDANTS，防止 framework 在 layout 时自动给某个子项发焦点
+            // 触发 stateListAnimator 缩放动画（就是「切到投稿 Tab 多条视频自动放大」）。
+            val recycler = binding.recycler
+            val originalDfh = recycler.descendantFocusability
+            recycler.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
             applyRecyclerForCurrentTab()
-            // adapter 切换后，无论之前焦点在哪，都把焦点明确留在 Tab 行，
-            // 不让 framework 自动把焦点落到新 recycler 的某个子项上。
+            // 焦点明确留在 Tab 行
             val ok = requestFocusSelectedTabView()
             AppLog.d(
                 "UpDetail",
                 "switchTab post tab=$next focusBefore=${currentFocus?.javaClass?.simpleName} " +
                     "focusAfter=${currentFocus?.javaClass?.simpleName} requestTabOk=$ok",
             )
+            // 下一帧再恢复，让 layout pass 跑完、Tab 焦点落定
+            recycler.post {
+                if (!isFinishing && !isDestroyed) {
+                    recycler.descendantFocusability = originalDfh
+                }
+            }
             ensureTabLoadedIfNeeded()
         }
     }
