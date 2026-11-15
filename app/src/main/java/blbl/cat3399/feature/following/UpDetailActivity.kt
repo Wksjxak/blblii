@@ -724,7 +724,9 @@ class UpDetailActivity : BaseActivity() {
                 archiveLayoutManager.spanCount = spanCountForWidth()
                 // 动态 Tab 装过「图文占满整行」的 SpanSizeLookup；投稿 Tab 必须复位为默认每卡 1 格，
                 // 否则残留 lookup 按旧 dynamicAdapter 快照判定，第一条投稿会被误判为图文而占满一栏。
-                archiveLayoutManager.spanSizeLookup = null
+                // 注意不能置 null：GridLayoutManager 刷新时会对 lookup 调 invalidateSpanIndexCache()，
+                // 空引用会在 onItemsChanged 抛 NPE。
+                archiveLayoutManager.spanSizeLookup = GridLayoutManager.DefaultSpanSizeLookup()
                 binding.llArchiveSearch.isVisible = true
                 // 从「合集」切回来时把搜索结果重新挂上，避免列表变成浏览态
                 archiveSearchUi?.let { ui ->
