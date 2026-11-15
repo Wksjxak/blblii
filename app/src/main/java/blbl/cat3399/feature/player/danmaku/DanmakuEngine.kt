@@ -172,6 +172,16 @@ internal class DanmakuEngine(
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
+    // 合并计数角标（×N）用独立等宽字体，与正文区分。
+    private val badgeFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
+        isSubpixelText = true
+    }
+    private val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
+        style = Paint.Style.STROKE
+        isSubpixelText = true
+    }
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         // Smooth-first by default for TVs (may be adjusted by overload strategies later).
         isFilterBitmap = true
@@ -399,6 +409,13 @@ internal class DanmakuEngine(
         }
         if (drawStroke.strokeWidth != strokeWidthPx) {
             drawStroke.strokeWidth = strokeWidthPx
+        }
+        if (badgeFill.textSize != ts) {
+            badgeFill.textSize = ts
+            badgeStroke.textSize = ts
+        }
+        if (badgeStroke.strokeWidth != strokeWidthPx) {
+            badgeStroke.strokeWidth = strokeWidthPx
         }
 
         val outlinePad = outlinePadPx
@@ -1167,9 +1184,15 @@ internal class DanmakuEngine(
                 val key = d.text
                 val cnt = ((mergeCounts[key] ?: 0) + 1).coerceAtMost(MAX_MERGE_COUNT)
                 mergeCounts[key] = cnt
-                val display = if (cnt >= threshold) "$key×$cnt" else key
+                val merged =
+                    if (cnt >= threshold) {
+                        // 合并后去掉原始彩色，统一中性白；彩色弹幕同样参与合并。
+                        d.copy(text = "$key×$cnt", color = MERGED_NEUTRAL_COLOR)
+                    } else {
+                        d.copy(text = key)
+                    }
                 val prev = keep[key]
-                if (prev == null || prev.timeMs <= d.timeMs) keep[key] = d.copy(text = display)
+                if (prev == null || prev.timeMs <= d.timeMs) keep[key] = merged
             } else {
                 keep["fixed_" + d.timeMs + "_" + System.identityHashCode(d)] = d
             }
@@ -1187,7 +1210,7 @@ internal class DanmakuEngine(
             try {
                 if (text.isBlank()) {
                     outlinePad * 2f
-                } else if ((!config.showHighLikeIcon || !item.data.isHighLiked) && !text.contains('[')) {
+                } else if ((!config.showHighLikeIcon || !item.data.isHighLiked) && !text.contains('[') && badgeSuffixRange(text) == null) {
                     actionPaint.measureText(text) + outlinePad * 2f
                 } else {
                     measureTextWidthWithInlineSegments(item = item, paint = actionPaint, outlinePad = outlinePad)
@@ -1205,48 +1228,34 @@ internal class DanmakuEngine(
         paint.getFontMetrics(actionFontMetrics)
         val emoteSizePx = (actionFontMetrics.descent - actionFontMetrics.ascent).coerceAtLeast(1f)
 
+        val segments = parseInlineSegments(item)
+            ?: return paint.measureText(text) + outlinePad * 2f
+
         var w = 0f
-        if (config.showHighLikeIcon && item.data.isHighLiked) {
-            w += emoteSizePx + inlineIconGapPx(emoteSizePx)
-        }
-        if (!text.contains('[')) return w + paint.measureText(text) + outlinePad * 2f
-        var i = 0
-        while (i < text.length) {
-            val open = text.indexOf('[', startIndex = i)
-            if (open < 0) {
-                w += paint.measureText(text, i, text.length)
-                break
+        for (seg in segments) {
+            when (seg) {
+                is DanmakuInlineSegment.Text -> w += paint.measureText(text, seg.start, seg.end)
+                is DanmakuInlineSegment.Emote -> w += emoteSizePx
+                is DanmakuInlineSegment.HighLikeIcon ->
+                    w += emoteSizePx + inlineIconGapPx(emoteSizePx)
+                is DanmakuInlineSegment.CountBadge ->
+                    w += badgeFill.measureText(text, seg.start, seg.end)
             }
-            val close = text.indexOf(']', startIndex = open + 1)
-            if (close < 0) {
-                w += paint.measureText(text, i, text.length)
-                break
-            }
-            if (open > i) {
-                w += paint.measureText(text, i, open)
-            }
-            val token = text.substring(open, close + 1)
-            val url = ReplyEmotePanelRepository.urlForToken(token)
-            if (url != null && url.startsWith("http")) {
-                w += emoteSizePx
-            } else {
-                w += paint.measureText(text, open, close + 1)
-            }
-            i = close + 1
         }
         return w + outlinePad * 2f
     }
 
     private fun parseInlineSegments(item: DanmakuItem): List<DanmakuInlineSegment>? {
         val text = item.data.text
-        var i = 0
-        var lastTextStart = 0
-        var hasInline = false
         val out = ArrayList<DanmakuInlineSegment>(8)
+        var hasInline = false
         if (config.showHighLikeIcon && item.data.isHighLiked) {
             out.add(DanmakuInlineSegment.HighLikeIcon)
             hasInline = true
         }
+
+        var lastTextStart = 0
+        var i = 0
         while (i < text.length) {
             val open = text.indexOf('[', startIndex = i)
             if (open < 0) break
@@ -1262,9 +1271,25 @@ internal class DanmakuEngine(
             }
             i = close + 1
         }
+
+        val badge = badgeSuffixRange(text)
+        if (badge != null) {
+            hasInline = true
+            if (lastTextStart < badge.first) {
+                out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = badge.first))
+            }
+            out.add(DanmakuInlineSegment.CountBadge(start = badge.first, end = badge.last + 1))
+        } else if (lastTextStart < text.length) {
+            out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = text.length))
+        }
         if (!hasInline) return null
-        if (lastTextStart < text.length) out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = text.length))
         return out
+    }
+
+    /** 匹配合并计数角标「×N」在文本中的区间；没有则返回 null。 */
+    private fun badgeSuffixRange(text: String): IntRange? {
+        val match = BADGE_SUFFIX_REGEX.find(text) ?: return null
+        return match.range
     }
 
     private fun drawTextDirect(
@@ -1285,8 +1310,10 @@ internal class DanmakuEngine(
         if (drawStrokeEnabled) {
             val strokeAlpha = ((opacityAlpha * 0xCC) / 255).coerceIn(0, 255)
             drawStroke.color = (strokeAlpha shl 24) or 0x000000
+            badgeStroke.color = drawStroke.color
         }
         drawFill.color = (opacityAlpha shl 24) or rgb
+        badgeFill.color = drawFill.color
 
         val textX = x + outlinePad
         val baseline = yTop + baselineOffset
@@ -1330,6 +1357,15 @@ internal class DanmakuEngine(
                         canvas.drawRoundRect(emoteTmpRectF, r, r, emotePlaceholderStroke)
                     }
                     cursorX += emoteSizePx
+                }
+                is DanmakuInlineSegment.CountBadge -> {
+                    if (seg.end > seg.start) {
+                        if (drawStrokeEnabled) {
+                            canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeStroke)
+                        }
+                        canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeFill)
+                        cursorX += badgeFill.measureText(text, seg.start, seg.end)
+                    }
                 }
                 DanmakuInlineSegment.HighLikeIcon -> {
                     drawInlineLikeIcon(cursorX, emoteTop, emoteSizePx, canvas, opacityAlpha)
@@ -1405,6 +1441,12 @@ internal class DanmakuEngine(
 
         /** 重复弹幕合并计数的封顶值，避免「×N」无限膨胀。 */
         private const val MAX_MERGE_COUNT = 999
+
+        /** 合并后统一使用的中性白（去掉原始彩色）。 */
+        private const val MERGED_NEUTRAL_COLOR = 0xFFFFFF
+
+        /** 合并计数角标：结尾的「×N」。 */
+        private val BADGE_SUFFIX_REGEX = Regex("×(\\d+)$")
 
         private const val FIXED_DURATION_MS = 4_000
         private const val MAX_LONG_SCROLL_SPEED_RATIO = 1.5f

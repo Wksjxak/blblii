@@ -53,6 +53,9 @@ internal class CacheManager(
         private const val CACHE_POOL_MAX_COUNT: Int = 72
 
         private const val MAX_RELEASE_PER_DRAIN = 24
+
+        /** 合并计数角标：结尾的「×N」。 */
+        private val BADGE_SUFFIX_REGEX = Regex("×(\\d+)$")
     }
 
     private val mainHandler = Handler(mainLooper)
@@ -82,6 +85,16 @@ internal class CacheManager(
     }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.DEFAULT_BOLD
+        style = Paint.Style.STROKE
+        isSubpixelText = true
+    }
+    // 合并计数角标（×N）用独立等宽字体。
+    private val badgeFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
+        isSubpixelText = true
+    }
+    private val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.MONOSPACE
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
@@ -205,6 +218,9 @@ internal class CacheManager(
         fill.textSize = textSize
         stroke.textSize = textSize
         stroke.strokeWidth = strokeWidth
+        badgeFill.textSize = textSize
+        badgeStroke.textSize = textSize
+        badgeStroke.strokeWidth = strokeWidth
 
         fill.getFontMetrics(fontMetrics)
         val textHeightPx = (fontMetrics.descent - fontMetrics.ascent).coerceAtLeast(1f)
@@ -227,6 +243,8 @@ internal class CacheManager(
         val rgb = danmaku.color and 0xFFFFFF
         stroke.color = (0xCC shl 24) or 0x000000
         fill.color = (0xFF shl 24) or rgb
+        badgeStroke.color = stroke.color
+        badgeFill.color = fill.color
 
         // Placeholder colors (alpha is applied at draw-time; keep opaque-ish here).
         placeholderFill.color = (0x22 shl 24) or 0x000000
@@ -274,6 +292,15 @@ internal class CacheManager(
                                 canvas.drawRoundRect(emoteRect, r, r, placeholderStroke)
                             }
                             cursorX += emoteSizePx
+                        }
+                        is DanmakuInlineSegment.CountBadge -> {
+                            if (seg.end > seg.start) {
+                                if (drawStrokeEnabled) {
+                                    canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeStroke)
+                                }
+                                canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeFill)
+                                cursorX += badgeFill.measureText(text, seg.start, seg.end)
+                            }
                         }
                         DanmakuInlineSegment.HighLikeIcon -> {
                             drawInlineLikeIcon(cursorX, emoteTop, emoteSizePx, canvas)
@@ -328,10 +355,22 @@ internal class CacheManager(
             }
             i = close + 1
         }
+        val badge = badgeSuffixRange(text)
+        if (badge != null) {
+            hasInline = true
+            if (lastTextStart < badge.first) {
+                out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = badge.first))
+            }
+            out.add(DanmakuInlineSegment.CountBadge(start = badge.first, end = badge.last + 1))
+        } else if (lastTextStart < text.length) {
+            out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = text.length))
+        }
         if (!hasInline) return null
-        if (lastTextStart < text.length) out.add(DanmakuInlineSegment.Text(start = lastTextStart, end = text.length))
         return out
     }
+
+    private fun badgeSuffixRange(text: String): IntRange? =
+        BADGE_SUFFIX_REGEX.find(text)?.range
 
     private fun shouldCacheInlineSegments(item: DanmakuItem): Boolean {
         val text = item.data.text
