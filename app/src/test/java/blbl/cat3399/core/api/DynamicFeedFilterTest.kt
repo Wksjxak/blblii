@@ -88,6 +88,10 @@ class DynamicFeedFilterTest {
         assertEquals(0, r.archiveHidden)
         assertEquals(1, r.fresh.size)
         assertTrue(r.fresh.first() is DynamicFeedItem.Rich)
+        assertEquals(1, r.rawArchive)
+        assertEquals(1, r.rawSeason)
+        assertEquals(1, r.rawExtra)
+        assertEquals(1, r.rawRich)
     }
 
     @Test

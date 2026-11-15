@@ -106,6 +106,8 @@ class UpDetailActivity : BaseActivity() {
     private var dynamicNextOffset: String? = null
     private var dynamicRequestToken: Int = 0
     private var dynamicConsecutiveEmptyPages: Int = 0
+    /** 本轮不足一屏自动续载已拉取的页数，达到 [DYNAMIC_MAX_AUTO_PAGES] 即停止。 */
+    private var dynamicAutoLoadPages: Int = 0
     private var pendingFocusFirstDynamicItemAfterLoad: Boolean = false
 
     // 浏览态（未搜索）的原始投稿与展示列表，搜索退出时用来还原列表
@@ -668,6 +670,14 @@ class UpDetailActivity : BaseActivity() {
     private fun switchTab(next: UpTab) {
         if (currentTab == next) return
         currentTab = next
+        // 离开动态 Tab 时作废在飞动态请求与续载计数：避免旧页回来后还往动态列表追加、
+        // 或 posted 的 underfill 在投稿 Tab 上继续触发 dynamicSpaceVideo。
+        if (next != UpTab.DYNAMIC) {
+            dynamicRequestToken++
+            dynamicIsLoadingMore = false
+            dynamicConsecutiveEmptyPages = 0
+            dynamicAutoLoadPages = 0
+        }
         // Tab switching can be triggered by focus changes while RecyclerView is recycling children
         // (e.g. during generic motion scroll). Switching adapter/layout manager synchronously at that
         // moment can crash with "Cannot call removeView(At) within removeView(At)".
@@ -712,6 +722,9 @@ class UpDetailActivity : BaseActivity() {
                 binding.recycler.adapter = archiveAdapter
                 binding.recycler.layoutManager = archiveLayoutManager
                 archiveLayoutManager.spanCount = spanCountForWidth()
+                // 动态 Tab 装过「图文占满整行」的 SpanSizeLookup；投稿 Tab 必须复位为默认每卡 1 格，
+                // 否则残留 lookup 按旧 dynamicAdapter 快照判定，第一条投稿会被误判为图文而占满一栏。
+                archiveLayoutManager.spanSizeLookup = null
                 binding.llArchiveSearch.isVisible = true
                 // 从「合集」切回来时把搜索结果重新挂上，避免列表变成浏览态
                 archiveSearchUi?.let { ui ->
@@ -1113,6 +1126,7 @@ class UpDetailActivity : BaseActivity() {
         dynamicEndReached = false
         dynamicIsLoadingMore = false
         dynamicConsecutiveEmptyPages = 0
+        dynamicAutoLoadPages = 0
         dynamicAdapter.submit(emptyList())
         binding.swipeRefresh.isRefreshing = true
         loadMoreDynamic(isRefresh = true)
@@ -1133,6 +1147,8 @@ class UpDetailActivity : BaseActivity() {
                     maxPages = 1,
                 )
                 if (token != dynamicRequestToken) return@launch
+                // 已切到其它 Tab：本次在飞结果丢弃，续载也不再触发。
+                if (currentTab != UpTab.DYNAMIC) return@launch
 
                 dynamicNextOffset = page.nextOffset
                 dynamicEndReached = page.nextOffset == null
@@ -1158,7 +1174,8 @@ class UpDetailActivity : BaseActivity() {
                     "UpDetail",
                     "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
                         "pageItems=${page.items.size} " +
-                        "filtered=archive:${result.archiveHidden},video:${result.videoHidden},dup:${result.dup} " +
+                        "type=archive:${result.rawArchive},season:${result.rawSeason},extra:${result.rawExtra},rich:${result.rawRich} " +
+                        "filtered=archive:${result.archiveHidden},showvideo_hidden:${result.videoHidden},dup:${result.dup} " +
                         "fresh=${fresh.size}",
                 )
                 // BV 列表仅 debug 包打印，release 生产日志不落 BV。
@@ -1189,22 +1206,35 @@ class UpDetailActivity : BaseActivity() {
     }
 
     /**
-     * 过滤后列表不足一屏且还有下一页时自动续载。连续多页 0 条新鲜内容则停止，避免空转请求。
+     * 过滤后列表不足一屏且还有下一页时自动续载。两道刹车：连续空页达上限、或本轮自动续载页数达上限，
+     * 停止并保留已有内容，避免空转请求。
      */
     private fun maybeContinueDynamicUnderfill() {
         if (dynamicIsLoadingMore || dynamicEndReached) return
-        if (dynamicConsecutiveEmptyPages >= DYNAMIC_MAX_EMPTY_PAGES) return
+        if (currentTab != UpTab.DYNAMIC) return
         val spanCount = archiveLayoutManager.spanCount.coerceAtLeast(1)
         val needed = spanCount * 2
         if (dynamicAdapter.itemCount >= needed) {
             dynamicConsecutiveEmptyPages = 0
+            dynamicAutoLoadPages = 0
+            return
+        }
+        val maxedByEmpty = dynamicConsecutiveEmptyPages >= DYNAMIC_MAX_EMPTY_PAGES
+        val maxedByPages = dynamicAutoLoadPages >= DYNAMIC_MAX_AUTO_PAGES
+        if (maxedByEmpty || maxedByPages) {
+            AppLog.d(
+                "UpDetail",
+                "dynamicUnderfill stop items=${dynamicAdapter.itemCount} needed=$needed " +
+                    "reason=max_pages emptyPages=$dynamicConsecutiveEmptyPages autoPages=$dynamicAutoLoadPages",
+            )
             return
         }
         AppLog.d(
             "UpDetail",
             "dynamicUnderfill continue items=${dynamicAdapter.itemCount} needed=$needed " +
-                "emptyPages=$dynamicConsecutiveEmptyPages",
+                "emptyPages=$dynamicConsecutiveEmptyPages autoPages=$dynamicAutoLoadPages",
         )
+        dynamicAutoLoadPages++
         loadMoreDynamic()
     }
 
@@ -2307,5 +2337,7 @@ class UpDetailActivity : BaseActivity() {
         private const val ACTIVITY_STACK_MAX_DEPTH: Int = 3
         /** 过滤后持续 0 新鲜条目的最大续载页数，超过即停止，避免空转请求。 */
         private const val DYNAMIC_MAX_EMPTY_PAGES: Int = 4
+        /** 一轮不足一屏自动续载的最大页数（不含首屏刷新），达到后保留已有内容停止续载。 */
+        private const val DYNAMIC_MAX_AUTO_PAGES: Int = 5
     }
 }

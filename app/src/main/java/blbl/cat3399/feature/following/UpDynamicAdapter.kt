@@ -129,13 +129,9 @@ class UpDynamicAdapter(
             binding.tvCoverLeftBottom.visibility = View.GONE
             binding.llActions.visibility = View.GONE
 
-            // 复用时显式重置封面尺寸与缩放类型，避免上一条遗留的 layoutParams/scaleType 导致图片异常放大。
+            // 复用时显式复位封面缩放类型；尺寸由 16:9 比例容器约束，不再覆写 layoutParams。
             val cover = binding.ivCover
             cover.scaleType = ImageView.ScaleType.CENTER_CROP
-            cover.layoutParams = cover.layoutParams.apply {
-                width = 0
-                height = 0
-            }
 
             ImageLoader.loadInto(binding.ivCover, ImageUrl.cover(item.coverUrl))
             binding.root.setOnClickListener { onClick(item) }

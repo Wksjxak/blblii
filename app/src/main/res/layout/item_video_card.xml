@@ -21,7 +21,7 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cl_cover"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="0dp"
             app:layout_constraintDimensionRatio="16:9"
             app:layout_constraintHeight_max="@dimen/video_card_cover_max_height"
             app:layout_constraintEnd_toEndOf="parent"
