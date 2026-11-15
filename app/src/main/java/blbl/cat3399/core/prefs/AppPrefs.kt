@@ -752,15 +752,15 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, false)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, value).apply()
 
-    /** UP 动态 Tab 是否隐藏「自动投稿视频动态」（UP 自己投的视频，动态流里和投稿 Tab 重复）。
-     * 注意：只隐藏和投稿列表重叠的 bvid，用户主动分享的动态视频不受影响。 */
+    /** UP 动态 Tab 是否隐藏「本人投稿视频动态」（和投稿 Tab 重复的归档部分）。
+     * 只隐藏与投稿列表重叠的本人归档视频；合集、附加分享、转发他人视频不受影响。 */
     var upDynamicHideArchiveVideo: Boolean
         get() = prefs.getBoolean("up_dynamic_hide_archive_video", false)
         set(value) = prefs.edit().putBoolean("up_dynamic_hide_archive_video", value).apply()
 
-    /** UP 动态 Tab 是否显示视频类动态（归档/投稿视频卡片总开关）。
-     * false 时动态流在渲染前直接丢弃归档视频卡片；与 [upDynamicHideArchiveVideo] 互不覆盖：
-     * 本项是「是否显示视频」的总开关，后者是「隐藏 UP 本人归档视频」的细化开关。 */
+    /** UP 动态 Tab 是否显示视频类动态（归档/合集/附加分享 ugc 的总开关）。
+     * false 时动态流在渲染前丢弃所有视频卡片、只留图文；与 [upDynamicHideArchiveVideo] 互不覆盖：
+     * 本项是「是否显示视频」的总开关，后者是「只隐藏本人归档视频」的细化开关。 */
     var upDynamicShowVideo: Boolean
         get() = prefs.getBoolean("up_dynamic_show_video", true)
         set(value) = prefs.edit().putBoolean("up_dynamic_show_video", value).apply()
