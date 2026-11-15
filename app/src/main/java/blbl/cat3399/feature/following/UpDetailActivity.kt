@@ -1774,7 +1774,7 @@ class UpDetailActivity : BaseActivity() {
 
         val iv = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            // 全屏查看是用户主动点开，允许加载动图（仍只显示首帧）
+            // 全屏查看是用户主动点开，允许加载并循环播放动图
             blbl.cat3399.core.image.ImageLoader.loadInto(this, url, allowAnimated = true)
         }
         container.addView(
@@ -1837,6 +1837,7 @@ class UpDetailActivity : BaseActivity() {
 
         dialog.setContentView(container)
         dialog.setOnDismissListener {
+            blbl.cat3399.core.image.ImageLoader.stopAnimated(iv)
             triggerView?.post {
                 if (triggerView.isAttachedToWindow && triggerView.visibility == View.VISIBLE) {
                     triggerView.requestFocus()

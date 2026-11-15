@@ -197,7 +197,7 @@ internal class VideoCommentImageViewerController(
         val picture = currentPictures[idx]
         views.image.resetViewport()
         views.image.setSourceDimensions(width = picture.width, height = picture.height)
-        // 查看器属于用户主动打开，允许加载动图（仍只显示首帧）
+        // 查看器属于用户主动打开，加载后循环播放动图
         ImageLoader.loadInto(views.image, picture.url, allowAnimated = true)
         updateNavigationUi()
     }

@@ -43,6 +43,7 @@ object ImageLoader {
         if (!allowAnimated && normalized != null && isAnimatedUrl(normalized)) {
             view.setTag(R.id.tag_image_loader_url, null)
             inFlight.remove(view)?.cancel()
+            stopAnimated(view)
             view.setImageDrawable(animatedPlaceholderFor(view.context))
             AppLog.d(TAG, "skip animated url=$normalized")
             return
@@ -51,6 +52,7 @@ object ImageLoader {
         if (normalized == null) {
             view.setTag(R.id.tag_image_loader_url, null)
             inFlight.remove(view)?.cancel()
+            stopAnimated(view)
             if (view.drawable !== placeholder) view.setImageDrawable(placeholder)
             return
         }
@@ -70,20 +72,40 @@ object ImageLoader {
         } else {
             view.setTag(R.id.tag_image_loader_url, normalized)
             inFlight.remove(view)?.cancel()
+            stopAnimated(view)
         }
 
         val bucket = decodeBucket(view)
         val cacheKey = "$normalized@$bucket"
         val cached = cache.get(cacheKey)
         if (cached != null) {
+            stopAnimated(view)
             view.setImageBitmap(cached)
             return
         }
 
-        if (view.drawable !== placeholder) view.setImageDrawable(placeholder)
+        if (view.drawable !== placeholder) {
+            stopAnimated(view)
+            view.setImageDrawable(placeholder)
+        }
         val job = scope.launch {
             try {
                 val bytes = withContext(Dispatchers.IO) { BiliClient.getBytes(normalized) }
+
+                // 全屏看图器允许动图：先尝试解码成可循环播放的动图 Drawable；
+                // 失败（静态图 / 老系统不支持的格式）再退回首帧静态位图。
+                if (allowAnimated) {
+                    val animated = withContext(Dispatchers.Default) { AnimatedImageDecoder.decodeAnimated(bytes) }
+                    if (animated != null) {
+                        if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
+                            stopAnimated(view)
+                            view.setImageDrawable(animated)
+                            (animated as? AnimatedImageDecoder.MovieDrawable)?.start()
+                        }
+                        return@launch
+                    }
+                }
+
                 // 按控件实际尺寸降采样：电视上整张原图解码既慢又吃内存，滚动时最容易被 GC 卡一下
                 val bmp = withContext(Dispatchers.Default) { decodeSampled(bytes, bucket) }
                 if (bmp != null) {
@@ -107,6 +129,11 @@ object ImageLoader {
         val height = if (view.height > 0) view.height else view.layoutParams?.height?.takeIf { it > 0 } ?: 0
         val maxSide = maxOf(width, height)
         return if (maxSide in 1..SMALL_BUCKET_MAX) SMALL_BUCKET_MAX else LARGE_BUCKET_MAX
+    }
+
+    /** 停掉 View 上正在播放的动图，避免换图/关闭后后台继续跑帧。 */
+    fun stopAnimated(view: ImageView) {
+        AnimatedImageDecoder.stopIfAnimated(view.drawable)
     }
 
     private fun decodeSampled(bytes: ByteArray, maxSide: Int): Bitmap? {
