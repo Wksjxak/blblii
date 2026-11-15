@@ -93,6 +93,8 @@ object ImageLoader {
                     }
                 }
             } catch (t: Throwable) {
+                // 复用切页时取消在途请求属于预期行为，不报为加载失败。
+                if (t is kotlinx.coroutines.CancellationException) return@launch
                 AppLog.w(TAG, "load failed url=$normalized", t)
             }
         }

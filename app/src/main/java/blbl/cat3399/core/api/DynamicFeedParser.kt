@@ -42,6 +42,13 @@ internal object DynamicFeedParser {
         val ownerMid = author?.optLong("mid")?.takeIf { v -> v > 0 }
         val authorPubTs = author?.optLong("pub_ts")?.takeIf { v -> v > 0 }
 
+        // 直播推荐卡片（major.live_rcmd / DYNAMIC_TYPE_LIVE_RCMD）：不进动态列表，单独记原因。
+        val majorType = major?.optString("type", "").orEmpty()
+        if (DynamicFeedFilter.isLiveRcmd(majorType) || major?.optJSONObject("live_rcmd") != null) {
+            AppLog.d(TAG, "feedDrop reason=live_rcmd dyn=${it.optString("id_str", "")}")
+            return null
+        }
+
         // 视频类：投稿/合集/充电视频
         parseArchiveVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
         parseUgcSeasonVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }

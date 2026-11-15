@@ -40,6 +40,12 @@ data class VideoCard(
     val isArchiveVideo: Boolean
         get() = majorType == MAJOR_TYPE_ARCHIVE
 
+    /** 是否为视频类动态卡片（归档 / 合集 / 附加分享 ugc）。「显示视频类动态」总开关按此判定。 */
+    val isVideoCard: Boolean
+        get() = majorType == MAJOR_TYPE_ARCHIVE ||
+            majorType == MAJOR_TYPE_UGC_SEASON ||
+            majorType == ADDITIONAL_UGC
+
     fun stableKey(): String =
         when {
             bvid.isNotBlank() -> "bvid:$bvid"

@@ -19,6 +19,7 @@ import blbl.cat3399.BuildConfig
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
 import blbl.cat3399.core.api.BiliApiException
+import blbl.cat3399.core.api.DynamicFeedFilter
 import blbl.cat3399.core.api.video.VideoCollectionKind
 import blbl.cat3399.core.api.video.VideoCollectionSection
 import blbl.cat3399.core.log.AppLog
@@ -104,6 +105,7 @@ class UpDetailActivity : BaseActivity() {
     private var dynamicEndReached: Boolean = false
     private var dynamicNextOffset: String? = null
     private var dynamicRequestToken: Int = 0
+    private var dynamicConsecutiveEmptyPages: Int = 0
     private var pendingFocusFirstDynamicItemAfterLoad: Boolean = false
 
     // 浏览态（未搜索）的原始投稿与展示列表，搜索退出时用来还原列表
@@ -1110,6 +1112,7 @@ class UpDetailActivity : BaseActivity() {
         dynamicNextOffset = null
         dynamicEndReached = false
         dynamicIsLoadingMore = false
+        dynamicConsecutiveEmptyPages = 0
         dynamicAdapter.submit(emptyList())
         binding.swipeRefresh.isRefreshing = true
         loadMoreDynamic(isRefresh = true)
@@ -1142,35 +1145,25 @@ class UpDetailActivity : BaseActivity() {
                 // 仅保留给去重/高亮等其它用途；注意它只覆盖投稿第一页 30 条，禁止作为全量归档过滤判据。
                 val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
                 val seen = HashSet<String>(loadedDynamicStableKeys)
-                var filteredArchive = 0
-                var filteredOther = 0
-                val fresh = page.items.filter { item ->
-                    val card = (item as? DynamicFeedItem.Video)?.card
-                    val isArchive = card != null && card.isArchiveVideo
-
-                    // 方案 C 兜底：show_video=false 时，归档卡片在进入后续 BV 匹配/渲染前直接丢弃。
-                    if (!showVideo && isArchive) {
-                        filteredOther++
-                        return@filter false
-                    }
-                    // 隐藏 UP 本人归档视频：作者 mid == hostMid 且 major 为 archive；
-                    // 合集（ugc_season）与主动分享的附加 ugc 视频不在此列。
-                    if (hideArchiveVideo && isArchive && card?.ownerMid != null && card.ownerMid == mid) {
-                        filteredArchive++
-                        return@filter false
-                    }
-                    val key = item.stableKey
-                    if (!seen.add(key)) return@filter false
-                    true
-                }
+                val result = DynamicFeedFilter.filter(
+                    items = page.items,
+                    hostMid = mid,
+                    hideArchiveVideo = hideArchiveVideo,
+                    showVideo = showVideo,
+                    seen = seen,
+                )
+                val fresh = result.fresh
+                if (fresh.isEmpty()) dynamicConsecutiveEmptyPages++ else dynamicConsecutiveEmptyPages = 0
                 AppLog.d(
                     "UpDetail",
                     "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
-                        "pageItems=${page.items.size} filtered=archive:$filteredArchive,other:$filteredOther fresh=${fresh.size}",
+                        "pageItems=${page.items.size} " +
+                        "filtered=archive:${result.archiveHidden},video:${result.videoHidden},dup:${result.dup} " +
+                        "fresh=${fresh.size}",
                 )
                 // BV 列表仅 debug 包打印，release 生产日志不落 BV。
                 if (BuildConfig.DEBUG && hideArchiveVideo) {
-                    val kept = fresh.filterIsInstance<DynamicFeedItem.Video>().map { it.card.bvid }
+                    val kept = DynamicFeedFilter.keptBvids(fresh)
                     if (kept.isNotEmpty()) {
                         AppLog.d("UpDetail", "dynamicFilter keptVideos=$kept")
                     }
@@ -1181,6 +1174,8 @@ class UpDetailActivity : BaseActivity() {
                 binding.recycler.post {
                     maybeConsumePendingFocusFirstContentAfterLoad()
                     archiveGridController?.consumePendingFocusAfterLoadMore()
+                    // 过滤后不足一屏且还有下一页：自动续载，避免一屏被过滤空后干等下一次按键。
+                    maybeContinueDynamicUnderfill()
                 }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
@@ -1191,6 +1186,26 @@ class UpDetailActivity : BaseActivity() {
                 dynamicIsLoadingMore = false
             }
         }
+    }
+
+    /**
+     * 过滤后列表不足一屏且还有下一页时自动续载。连续多页 0 条新鲜内容则停止，避免空转请求。
+     */
+    private fun maybeContinueDynamicUnderfill() {
+        if (dynamicIsLoadingMore || dynamicEndReached) return
+        if (dynamicConsecutiveEmptyPages >= DYNAMIC_MAX_EMPTY_PAGES) return
+        val spanCount = archiveLayoutManager.spanCount.coerceAtLeast(1)
+        val needed = spanCount * 2
+        if (dynamicAdapter.itemCount >= needed) {
+            dynamicConsecutiveEmptyPages = 0
+            return
+        }
+        AppLog.d(
+            "UpDetail",
+            "dynamicUnderfill continue items=${dynamicAdapter.itemCount} needed=$needed " +
+                "emptyPages=$dynamicConsecutiveEmptyPages",
+        )
+        loadMoreDynamic()
     }
 
     private fun resetAndLoadSeasonsSeries() {
@@ -2290,5 +2305,7 @@ class UpDetailActivity : BaseActivity() {
         const val EXTRA_SIGN: String = "sign"
         private const val ACTIVITY_STACK_GROUP: String = "player_up_flow"
         private const val ACTIVITY_STACK_MAX_DEPTH: Int = 3
+        /** 过滤后持续 0 新鲜条目的最大续载页数，超过即停止，避免空转请求。 */
+        private const val DYNAMIC_MAX_EMPTY_PAGES: Int = 4
     }
 }
