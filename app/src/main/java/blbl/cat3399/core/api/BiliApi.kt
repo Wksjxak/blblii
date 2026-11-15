@@ -1829,6 +1829,61 @@ object BiliApi {
     }
 
     /**
+     * 空间图文专用接口：`feed/space` 只会稀疏返回图文，官方 UP 主页还会合并
+     * `/opus/feed/space` 拉取全量图文/纯文字动态。这里把简化条目映射成 [DynamicFeedItem.Rich]，
+     * 与 `feed/space` 结果按 opus_id（即动态 id）在过滤层去重。
+     */
+    suspend fun dynamicOpusSpace(hostMid: Long, offset: String? = null): UpDynamicPage {
+        val params = mutableMapOf(
+            "host_mid" to hostMid.toString(),
+            "type" to "all",
+            "platform" to "web",
+        )
+        if (!offset.isNullOrBlank()) params["offset"] = offset
+        val url = BiliClient.withQuery(
+            "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/feed/space",
+            params,
+        )
+        val json = BiliClient.getJson(url)
+        val data = json.optJSONObject("data") ?: JSONObject()
+        val items = data.optJSONArray("items") ?: JSONArray()
+        val hasMore = data.optBoolean("has_more", false)
+        return withContext(Dispatchers.Default) {
+            val cards = ArrayList<DynamicFeedItem>()
+            for (i in 0 until items.length()) {
+                val obj = items.optJSONObject(i) ?: continue
+                val opusId = obj.optString("opus_id", "").trim()
+                if (opusId.isBlank()) continue
+                val content = obj.optString("content", "").trim()
+                val cover = obj.optJSONObject("cover")?.optString("url", "").orEmpty().trim()
+                val images = if (cover.isNotBlank()) listOf(cover) else emptyList()
+                if (content.isBlank() && images.isEmpty()) continue
+                cards.add(
+                    DynamicFeedItem.Rich(
+                        dynId = opusId,
+                        dynOid = opusId.toLongOrNull(),
+                        commentType = 12,
+                        text = content,
+                        title = null,
+                        images = images,
+                        authorName = "",
+                        authorFace = null,
+                        pubTs = null,
+                    ),
+                )
+            }
+            val next = data.optString("offset", "").takeIf { it.isNotBlank() }
+            val nextOffset = if (hasMore) next else null
+            AppLog.d(
+                TAG,
+                "dynamicOpusSpace hostMid=$hostMid items=${items.length()} cards=${cards.size} " +
+                    "hasMore=$hasMore nextOffset=${nextOffset?.take(8)}",
+            )
+            UpDynamicPage(cards, nextOffset)
+        }
+    }
+
+    /**
      * 动态详情：拉完整图文段落。
      * 优先 /opus/detail（响应里 modules 是数组，正文在 MODULE_TYPE_CONTENT.module_content.paragraphs），
      * 失败再回落 /detail（modules 是对象，正文在 module_dynamic.major.opus.paragraphs）。

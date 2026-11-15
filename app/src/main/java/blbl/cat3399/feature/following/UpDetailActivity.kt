@@ -104,6 +104,9 @@ class UpDetailActivity : BaseActivity() {
     private var dynamicIsLoadingMore: Boolean = false
     private var dynamicEndReached: Boolean = false
     private var dynamicNextOffset: String? = null
+    /** 图文专用接口（/opus/feed/space）的独立分页偏移，与 feed/space 互不影响。 */
+    private var dynamicOpusOffset: String? = null
+    private var dynamicOpusEndReached: Boolean = false
     private var dynamicRequestToken: Int = 0
     private var dynamicConsecutiveEmptyPages: Int = 0
     /** 本轮不足一屏自动续载已拉取的页数，达到 [DYNAMIC_MAX_AUTO_PAGES] 即停止。 */
@@ -1125,6 +1128,8 @@ class UpDetailActivity : BaseActivity() {
         dynamicRequestToken++
         loadedDynamicStableKeys.clear()
         dynamicNextOffset = null
+        dynamicOpusOffset = null
+        dynamicOpusEndReached = false
         dynamicEndReached = false
         dynamicIsLoadingMore = false
         dynamicConsecutiveEmptyPages = 0
@@ -1142,18 +1147,33 @@ class UpDetailActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 // 单次只拉一页（maxPages=1）：滚动到底再拉下一页，避免一上来追好几页
-                val page = BiliApi.dynamicSpaceVideo(
+                val feedPage = BiliApi.dynamicSpaceVideo(
                     hostMid = mid,
                     offset = offset,
                     minCardCount = 0,
                     maxPages = 1,
                 )
+                // 图文专用接口失败不拖垮整条动态流：回退为只有 feed/space 的结果。
+                var opusItems: List<DynamicFeedItem> = emptyList()
+                var opusNextOffset: String? = null
+                try {
+                    val opusPage = BiliApi.dynamicOpusSpace(hostMid = mid, offset = dynamicOpusOffset)
+                    opusItems = opusPage.items
+                    opusNextOffset = opusPage.nextOffset
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    AppLog.w("UpDetail", "dynamicOpusSpace failed mid=$mid", t)
+                }
                 if (token != dynamicRequestToken) return@launch
                 // 已切到其它 Tab：本次在飞结果丢弃，续载也不再触发。
                 if (currentTab != UpTab.DYNAMIC) return@launch
 
-                dynamicNextOffset = page.nextOffset
-                dynamicEndReached = page.nextOffset == null
+                dynamicNextOffset = feedPage.nextOffset
+                dynamicOpusOffset = opusNextOffset
+                dynamicOpusEndReached = opusNextOffset == null
+                dynamicEndReached = feedPage.nextOffset == null && opusNextOffset == null
+
+                val mergedItems = feedPage.items + opusItems
 
                 // 过滤按「卡片归属」判断：major 类型 + 作者 mid 是否为当前 host。
                 // 不再用投稿第一页的 bvid 集合做归档匹配——archiveBvids 只覆盖 spaceArcSearch 首页 30 条，
@@ -1164,7 +1184,7 @@ class UpDetailActivity : BaseActivity() {
                 val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
                 val seen = HashSet<String>(loadedDynamicStableKeys)
                 val result = DynamicFeedFilter.filter(
-                    items = page.items,
+                    items = mergedItems,
                     hostMid = mid,
                     hideArchiveVideo = hideArchiveVideo,
                     showVideo = showVideo,
@@ -1175,7 +1195,7 @@ class UpDetailActivity : BaseActivity() {
                 AppLog.d(
                     "UpDetail",
                     "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
-                        "pageItems=${page.items.size} " +
+                        "pageItems=${mergedItems.size} feed=${feedPage.items.size} opus=${opusItems.size} " +
                         "type=archive:${result.rawArchive},season:${result.rawSeason},extra:${result.rawExtra},rich:${result.rawRich} " +
                         "filtered=archive:${result.archiveHidden},showvideo_hidden:${result.videoHidden},dup:${result.dup} " +
                         "fresh=${fresh.size}",
