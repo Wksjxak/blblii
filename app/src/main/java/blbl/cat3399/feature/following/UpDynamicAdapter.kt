@@ -3,10 +3,14 @@ package blbl.cat3399.feature.following
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.InflateException
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.image.ImageLoader
 import blbl.cat3399.core.image.ImageUrl
+import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.DynamicFeedItem
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.ui.cloneInUserScale
@@ -57,19 +61,31 @@ class UpDynamicAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context).cloneInUserScale(parent.context)
-        return when (viewType) {
-            TYPE_VIDEO -> VideoVh(
-                ItemVideoCardBinding.inflate(inflater, parent, false),
-                onVideoClick,
-            )
-            else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick, onRichLongClick, onRichImageClick)
+        return try {
+            when (viewType) {
+                TYPE_VIDEO -> VideoVh(
+                    ItemVideoCardBinding.inflate(inflater, parent, false),
+                    onVideoClick,
+                )
+                else -> RichVh(ItemUpDynamicRichBinding.inflate(inflater, parent, false), onRichClick, onRichLongClick, onRichImageClick)
+            }
+        } catch (e: InflateException) {
+            // 主题属性解析失败等 inflate 异常：兜底最小布局，禁止单条 item 失败拖垮整列。
+            AppLog.w(TAG, "inflate dynamic item (viewType=$viewType) failed, fallback layout", e)
+            FallbackVh(inflater.inflate(R.layout.item_up_dynamic_fallback, parent, false))
+        } catch (e: Throwable) {
+            // 部分 OEM/主题组合下属性解析失败会直接抛 UnsupportedOperationException 而非包成 InflateException，一并兜底。
+            AppLog.w(TAG, "inflate dynamic item (viewType=$viewType) threw ${e.javaClass.simpleName}, fallback layout", e)
+            FallbackVh(inflater.inflate(R.layout.item_up_dynamic_fallback, parent, false))
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        when (val item = items[position]) {
-            is DynamicFeedItem.Video -> (holder as VideoVh).bind(item.card)
-            is DynamicFeedItem.Rich -> (holder as RichVh).bind(item)
+        val item = items[position]
+        when (holder) {
+            is FallbackVh -> holder.bind(item)
+            is VideoVh -> holder.bind((item as DynamicFeedItem.Video).card)
+            is RichVh -> holder.bind(item as DynamicFeedItem.Rich)
         }
     }
 
@@ -113,6 +129,14 @@ class UpDynamicAdapter(
             binding.tvCoverLeftBottom.visibility = View.GONE
             binding.llActions.visibility = View.GONE
 
+            // 复用时显式重置封面尺寸与缩放类型，避免上一条遗留的 layoutParams/scaleType 导致图片异常放大。
+            val cover = binding.ivCover
+            cover.scaleType = ImageView.ScaleType.CENTER_CROP
+            cover.layoutParams = cover.layoutParams.apply {
+                width = 0
+                height = 0
+            }
+
             ImageLoader.loadInto(binding.ivCover, ImageUrl.cover(item.coverUrl))
             binding.root.setOnClickListener { onClick(item) }
         }
@@ -149,6 +173,7 @@ class UpDynamicAdapter(
                 if (item.images.isEmpty()) View.GONE else View.VISIBLE
             val imgs = listOf(binding.ivRichImg1, binding.ivRichImg2, binding.ivRichImg3)
             imgs.forEachIndexed { idx, iv ->
+                iv.scaleType = ImageView.ScaleType.CENTER_CROP
                 val url = item.images.getOrNull(idx)
                 if (url != null) {
                     iv.visibility = View.VISIBLE
@@ -174,6 +199,7 @@ class UpDynamicAdapter(
                 binding.tvRichOrigText.text = sb.toString()
                 if (!item.origCover.isNullOrBlank()) {
                     binding.ivRichOrigCover.visibility = View.VISIBLE
+                    binding.ivRichOrigCover.scaleType = ImageView.ScaleType.CENTER_CROP
                     ImageLoader.loadInto(binding.ivRichOrigCover, item.origCover)
                 } else {
                     binding.ivRichOrigCover.visibility = View.GONE
@@ -182,7 +208,20 @@ class UpDynamicAdapter(
         }
     }
 
+    /** inflate 失败时的兜底 ViewHolder：只渲染标题，保证列表可滚动、不崩溃。 */
+    class FallbackVh(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val title: TextView = itemView.findViewById(R.id.tv_fallback_title)
+
+        fun bind(item: DynamicFeedItem) {
+            title.text = when (item) {
+                is DynamicFeedItem.Video -> item.card.title
+                is DynamicFeedItem.Rich -> item.title ?: item.text
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "UpDynamicAdapter"
         private const val TYPE_VIDEO = 0
         private const val TYPE_RICH = 1
     }

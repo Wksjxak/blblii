@@ -480,6 +480,7 @@ class SettingsRenderer(
                     ),
                     SettingEntry(SettingId.PlayerOpenDetailBeforePlay, "播放前打开详情页", if (prefs.playerOpenDetailBeforePlay) "开" else "关", null),
                     SettingEntry(SettingId.UpDynamicHideArchiveVideo, "动态栏隐藏投稿同步视频", if (prefs.upDynamicHideArchiveVideo) "开" else "关", null),
+                    SettingEntry(SettingId.UpDynamicShowVideo, "动态栏显示视频类动态", if (prefs.upDynamicShowVideo) "开" else "关", "关闭后动态流不显示归档/投稿视频卡片"),
                     SettingEntry(SettingId.DynamicDetailTextSize, "动态详情字号", prefs.dynamicDetailTextSize.toInt().toString() + "sp", null),
                     SettingEntry(
                         SettingId.DynamicCommentTextSize,

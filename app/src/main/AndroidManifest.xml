@@ -109,6 +109,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- 第三方桌面（灵控/北斗 UI）读取的启动图标文件名。 -->
+            <meta-data
+                android:name="beidouui_icon"
+                android:value="beidouui_icon.png" />
         </activity-alias>
 
         <!-- Legacy themed aliases stay disabled by default, but keep their launcher filters so

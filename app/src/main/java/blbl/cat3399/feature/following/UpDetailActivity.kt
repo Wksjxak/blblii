@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import blbl.cat3399.BuildConfig
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
 import blbl.cat3399.core.api.BiliApiException
@@ -1133,15 +1134,29 @@ class UpDetailActivity : BaseActivity() {
                 dynamicNextOffset = page.nextOffset
                 dynamicEndReached = page.nextOffset == null
 
-                // 设置项只隐藏「投稿同步视频」（动态流里和投稿 Tab 重复的 bvid）；
-                // 用户在动态里主动分享的视频 bvid 不在投稿集合里，一律保留
+                // 过滤按「卡片归属」判断：major 类型 + 作者 mid 是否为当前 host。
+                // 不再用投稿第一页的 bvid 集合做归档匹配——archiveBvids 只覆盖 spaceArcSearch 首页 30 条，
+                // 该 UP 投稿总数可能上千，首页之外的归档视频 BV 匹配会漏判而被错误保留。
                 val hideArchiveVideo = BiliClient.prefs.upDynamicHideArchiveVideo
+                val showVideo = BiliClient.prefs.upDynamicShowVideo
+                // 仅保留给去重/高亮等其它用途；注意它只覆盖投稿第一页 30 条，禁止作为全量归档过滤判据。
                 val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
                 val seen = HashSet<String>(loadedDynamicStableKeys)
-                var filteredCount = 0
+                var filteredArchive = 0
+                var filteredOther = 0
                 val fresh = page.items.filter { item ->
-                    if (hideArchiveVideo && item is DynamicFeedItem.Video && item.card.bvid in archiveBvids) {
-                        filteredCount++
+                    val card = (item as? DynamicFeedItem.Video)?.card
+                    val isArchive = card != null && card.isArchiveVideo
+
+                    // 方案 C 兜底：show_video=false 时，归档卡片在进入后续 BV 匹配/渲染前直接丢弃。
+                    if (!showVideo && isArchive) {
+                        filteredOther++
+                        return@filter false
+                    }
+                    // 隐藏 UP 本人归档视频：作者 mid == hostMid 且 major 为 archive；
+                    // 合集（ugc_season）与主动分享的附加 ugc 视频不在此列。
+                    if (hideArchiveVideo && isArchive && card?.ownerMid != null && card.ownerMid == mid) {
+                        filteredArchive++
                         return@filter false
                     }
                     val key = item.stableKey
@@ -1150,10 +1165,11 @@ class UpDetailActivity : BaseActivity() {
                 }
                 AppLog.d(
                     "UpDetail",
-                    "dynamicFilter hide=$hideArchiveVideo archiveBvids=${archiveBvids.size} " +
-                        "pageItems=${page.items.size} filtered=$filteredCount fresh=${fresh.size}",
+                    "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
+                        "pageItems=${page.items.size} filtered=archive:$filteredArchive,other:$filteredOther fresh=${fresh.size}",
                 )
-                if (hideArchiveVideo) {
+                // BV 列表仅 debug 包打印，release 生产日志不落 BV。
+                if (BuildConfig.DEBUG && hideArchiveVideo) {
                     val kept = fresh.filterIsInstance<DynamicFeedItem.Video>().map { it.card.bvid }
                     if (kept.isNotEmpty()) {
                         AppLog.d("UpDetail", "dynamicFilter keptVideos=$kept")

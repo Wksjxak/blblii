@@ -244,6 +244,7 @@ internal object DynamicFeedParser {
                 pubDateText = null,
                 isChargingArc = charging,
                 trackId = trackId,
+                majorType = VideoCard.MAJOR_TYPE_ARCHIVE,
             ),
         )
     }
@@ -285,6 +286,7 @@ internal object DynamicFeedParser {
                 pubDateText = null,
                 isChargingArc = charging,
                 trackId = trackId,
+                majorType = VideoCard.MAJOR_TYPE_UGC_SEASON,
             ),
         )
     }
@@ -325,6 +327,7 @@ internal object DynamicFeedParser {
                 pubDateText = null,
                 isChargingArc = charging,
                 trackId = trackId,
+                majorType = VideoCard.ADDITIONAL_UGC,
             ),
         )
     }

@@ -30,6 +30,8 @@
 
     <!-- Video card -->
     <dimen name="video_card_margin">8dp</dimen>
+    <!-- 封面高度上限：横屏小高度（screen_height_dp≈321）+ 字号缩放时不超过可用高度 1/3。 -->
+    <dimen name="video_card_cover_max_height">96dp</dimen>
     <dimen name="video_card_text_margin">10dp</dimen>
     <dimen name="video_card_duration_text_size">14sp</dimen>
     <dimen name="video_card_duration_padding_h">8dp</dimen>

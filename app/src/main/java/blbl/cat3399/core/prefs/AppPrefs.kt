@@ -758,6 +758,13 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean("up_dynamic_hide_archive_video", false)
         set(value) = prefs.edit().putBoolean("up_dynamic_hide_archive_video", value).apply()
 
+    /** UP 动态 Tab 是否显示视频类动态（归档/投稿视频卡片总开关）。
+     * false 时动态流在渲染前直接丢弃归档视频卡片；与 [upDynamicHideArchiveVideo] 互不覆盖：
+     * 本项是「是否显示视频」的总开关，后者是「隐藏 UP 本人归档视频」的细化开关。 */
+    var upDynamicShowVideo: Boolean
+        get() = prefs.getBoolean("up_dynamic_show_video", true)
+        set(value) = prefs.edit().putBoolean("up_dynamic_show_video", value).apply()
+
     /** 动态详情正文字号（sp），默认 20。 */
     var dynamicDetailTextSize: Float
         get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f).coerceIn(DYNAMIC_DETAIL_TEXT_SIZE_MIN, DYNAMIC_DETAIL_TEXT_SIZE_MAX)
