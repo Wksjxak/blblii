@@ -111,4 +111,8 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
           fi
+          # 清掉历史遗留的 apk 资产，只保留本次正式包，避免更新逻辑先命中旧包。
+          while IFS= read -r old_apk; do
+            [ -n "$old_apk" ] && gh release delete-asset "$RELEASE_TAG" "$old_apk" --yes || true
+          done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep '\.apk$' || true)
           gh release upload "$RELEASE_TAG" "$DOWNLOAD_APK" --clobber

@@ -79,11 +79,19 @@ jobs:
           aws s3 cp "CHANGELOG.md" "s3://${R2_BUCKET}/${KEY_PREFIX}CHANGELOG.md" --endpoint-url "${ENDPOINT}" --content-type "text/markdown; charset=utf-8" --cache-control "no-cache"
           aws s3 cp "app/build/outputs/apk/debug/app-debug.apk" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-${CLEAN_VERSION}-debug.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive"
           aws s3 cp "app/build/outputs/apk/debug/app-debug.apk" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-latest-debug.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive" --cache-control "no-cache"
+      - name: Prepare named debug APK
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          CLEAN_VERSION="${VERSION_NAME#v}"
+          DOWNLOAD_APK="app/build/outputs/apk/debug/blbl-android-${CLEAN_VERSION}-debug.apk"
+          cp "app/build/outputs/apk/debug/app-debug.apk" "${DOWNLOAD_APK}"
+          echo "DOWNLOAD_APK=${DOWNLOAD_APK}" >> "${GITHUB_ENV}"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: blbl-android-${{ inputs.version_name }}-debug
+          path: ${{ env.DOWNLOAD_APK }}
       - name: Publish debug APK to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -102,4 +110,8 @@ jobs:
           else
             gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
           fi
-          gh release upload "$RELEASE_TAG" "app/build/outputs/apk/debug/app-debug.apk#blbl-android-${VERSION_NAME}-debug.apk" --clobber
+          # 清掉历史遗留的 apk 资产，只保留本次本通道的包，避免更新逻辑先命中旧包。
+          while IFS= read -r old_apk; do
+            [ -n "$old_apk" ] && gh release delete-asset "$RELEASE_TAG" "$old_apk" --yes || true
+          done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep '\.apk$' || true)
+          gh release upload "$RELEASE_TAG" "$DOWNLOAD_APK" --clobber
