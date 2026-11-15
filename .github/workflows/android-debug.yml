@@ -1,4 +1,4 @@
-name: Android Build
+name: Android Debug
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-debug:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,29 +30,14 @@ jobs:
         run: |
           mkdir -p keystore
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
-      - name: Resolve release tag and channel
-        env:
-          VERSION_NAME: ${{ inputs.version_name }}
-        run: |
-          if [[ "$VERSION_NAME" == v* || "$VERSION_NAME" == test-* ]]; then TAG="$VERSION_NAME"; else TAG="v$VERSION_NAME"; fi
-          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
-          # test-* 预发布走 debug 构建类型（独立包名 .debug，走测试通道）；其余为正式 release 构建。
-          if [[ "$TAG" == test-* ]]; then echo "CHANNEL=debug" >> "$GITHUB_ENV"; else echo "CHANNEL=release" >> "$GITHUB_ENV"; fi
-      - name: Build APK
+      - name: Build debug APK
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           VCODE: ${{ github.run_number }}
-        run: |
-          if [ "$CHANNEL" = "debug" ]; then
-            ./gradlew assembleDebug -PversionName=${{ inputs.version_name }} -PversionCode=$((100000 + VCODE))
-            echo "APK_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
-          else
-            ./gradlew assembleRelease -PversionName=${{ inputs.version_name }} -PversionCode=$((100000 + VCODE))
-            echo "APK_PATH=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
-          fi
-      - name: Upload APK to R2 (optional)
+        run: ./gradlew assembleDebug -PversionName=${{ inputs.version_name }} -PversionCode=$((100000 + VCODE))
+      - name: Upload debug APK to R2 (optional)
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -60,8 +45,6 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
           R2_PREFIX: ${{ vars.R2_PREFIX || secrets.R2_PREFIX }}
           VERSION_NAME: ${{ inputs.version_name }}
-          CHANNEL: ${{ env.CHANNEL }}
-          APK_PATH: ${{ env.APK_PATH }}
         run: |
           set -euo pipefail
           if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_ACCOUNT_ID:-}" ] || [ -z "${R2_BUCKET:-}" ]; then
@@ -94,20 +77,18 @@ jobs:
           printf '%s' "${CLEAN_VERSION}" > version
           aws s3 cp "version" "s3://${R2_BUCKET}/${KEY_PREFIX}version" --endpoint-url "${ENDPOINT}" --content-type "text/plain" --cache-control "no-cache"
           aws s3 cp "CHANGELOG.md" "s3://${R2_BUCKET}/${KEY_PREFIX}CHANGELOG.md" --endpoint-url "${ENDPOINT}" --content-type "text/markdown; charset=utf-8" --cache-control "no-cache"
-          aws s3 cp "${APK_PATH}" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-${CLEAN_VERSION}-${CHANNEL}.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive"
-          aws s3 cp "${APK_PATH}" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-latest-${CHANNEL}.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive" --cache-control "no-cache"
-      - name: Upload APK
+          aws s3 cp "app/build/outputs/apk/debug/app-debug.apk" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-${CLEAN_VERSION}-debug.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive"
+          aws s3 cp "app/build/outputs/apk/debug/app-debug.apk" "s3://${R2_BUCKET}/${KEY_PREFIX}blbl-latest-debug.apk" --endpoint-url "${ENDPOINT}" --content-type "application/vnd.android.package-archive" --cache-control "no-cache"
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-apk
-          path: ${{ env.APK_PATH }}
-      - name: Publish APK to GitHub Release
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish debug APK to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: ${{ inputs.version_name }}
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
-          CHANNEL: ${{ env.CHANNEL }}
-          APK_PATH: ${{ env.APK_PATH }}
+          RELEASE_TAG: ${{ startsWith(inputs.version_name, 'v') || startsWith(inputs.version_name, 'test-') && inputs.version_name || format('v{0}', inputs.version_name) }}
           CHANGELOG: ${{ inputs.changelog }}
         run: |
           PRERELEASE_FLAG=""
@@ -121,13 +102,4 @@ jobs:
           else
             gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --title "$RELEASE_TAG" --notes-file changelog.md --target "$GITHUB_SHA"
           fi
-          # 清掉该 Release 上历史遗留的 apk 资产（旧包名/旧通道），只保留本次本通道的包，
-          # 避免更新逻辑先命中残留的 debug 包。
-          while IFS= read -r old_apk; do
-            [ -n "$old_apk" ] && gh release delete-asset "$RELEASE_TAG" "$old_apk" --yes || true
-          done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep '\.apk$' || true)
-          # 重命名后再上传：部分 gh 版本不支持路径#别名语法，直接以目标文件名落盘，
-          # 资产名与更新器约定一致（blbl-android-<版本>-<通道>.apk）。
-          ASSET_NAME="blbl-android-${VERSION_NAME}-${CHANNEL}.apk"
-          cp "${APK_PATH}" "${ASSET_NAME}"
-          gh release upload "$RELEASE_TAG" "${ASSET_NAME}" --clobber
+          gh release upload "$RELEASE_TAG" "app/build/outputs/apk/debug/app-debug.apk#blbl-android-${VERSION_NAME}-debug.apk" --clobber
