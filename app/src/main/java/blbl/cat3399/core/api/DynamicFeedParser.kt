@@ -17,6 +17,12 @@ internal object DynamicFeedParser {
 
     private const val TAG = "BiliApi"
 
+    /** 已在图文/视频分支显式解析的 major 子对象键；其余键出现在这里会打未识别诊断日志。 */
+    private val HANDLED_MAJOR_KEYS = setOf(
+        "archive", "ugc_season", "opus", "draw", "article", "live_reverse", "live_rcmd",
+        "common", "courses", "live", "music",
+    )
+
     fun parse(bili: BiliApi, items: JSONArray): List<DynamicFeedItem> {
         val cards = ArrayList<DynamicFeedItem>()
         for (i in 0 until items.length()) {
@@ -53,6 +59,21 @@ internal object DynamicFeedParser {
         parseArchiveVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
         parseUgcSeasonVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
         parseAdditionalUgcVideo(bili, moduleDynamic, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
+
+        // 未识别的 major 子对象：打诊断日志，便于下一轮日志确认是否有漏解析的动态类型。
+        major?.let { m ->
+            val unhandled =
+                m.keys().asSequence()
+                    .filter { it !in HANDLED_MAJOR_KEYS }
+                    .toList()
+            if (unhandled.isNotEmpty()) {
+                AppLog.d(TAG, "majorUnhandled type=$majorType keys=[${unhandled.joinToString(",")}] dyn=${it.optString("id_str", "")}")
+            }
+        }
+
+        // 转发动态：原动态可能挂在 module_dynamic.orig 或顶层 orig； own 评论可为空，
+        // 不能在空文本检查阶段就把它丢掉，否则整条例转发动态消失。
+        val origEarly = moduleDynamic.optJSONObject("orig") ?: it.optJSONObject("orig")
 
         // 图文 / 纯文字动态
         val desc = moduleDynamic.optJSONObject("desc")
@@ -108,6 +129,14 @@ internal object DynamicFeedParser {
                         .ifBlank { art.optString("jump_title", "").trim() }
                         .ifBlank { null }
                 }
+                // 专栏封面在 covers 数组里（最多三张），个别形态才用单个 cover 字段。
+                art.optJSONArray("covers")?.let { arr ->
+                    for (k in 0 until arr.length()) {
+                        val cover = arr.optJSONObject(k) ?: continue
+                        val u = cover.optString("url", "").ifBlank { cover.optString("src", "") }
+                        if (u.isNotBlank()) images.add(u)
+                    }
+                }
                 art.optString("cover", "").trim().takeIf { c -> c.isNotBlank() }?.let { images.add(it) }
                 if (text.isBlank()) text = art.optString("desc", "").trim()
             }
@@ -118,6 +147,38 @@ internal object DynamicFeedParser {
                         .ifBlank { null }
                 }
                 lv.optString("cover", "").trim().takeIf { c -> c.isNotBlank() }?.let { images.add(it) }
+            }
+
+            // 其它非视频卡片兜底：通用卡片 / 课程 / 直播分享 / 音频。取标题 + 封面渲染成图文卡，
+            // 避免这类动态在列表里被空文本检查丢掉；字段缺失时对应位置留空。
+            m.optJSONObject("common")?.let { c ->
+                if (title == null) {
+                    title = c.optString("title", "").trim()
+                        .ifBlank { c.optString("label", "").trim() }
+                        .ifBlank { null }
+                }
+                c.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
+            }
+            m.optJSONObject("courses")?.let { cs ->
+                if (title == null) {
+                    title = cs.optString("title", "").trim()
+                        .ifBlank { cs.optString("sub_title", "").trim() }
+                        .ifBlank { null }
+                }
+                cs.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
+                if (text.isBlank()) text = cs.optString("desc", "").trim()
+            }
+            m.optJSONObject("live")?.let { lv ->
+                if (title == null) {
+                    title = lv.optString("title", "").trim()
+                        .ifBlank { lv.optString("desc_first", "").trim() }
+                        .ifBlank { null }
+                }
+                lv.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
+            }
+            m.optJSONObject("music")?.let { mu ->
+                if (title == null) title = mu.optString("label", "").trim().ifBlank { null }
+                mu.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
             }
         }
 
@@ -132,9 +193,17 @@ internal object DynamicFeedParser {
                     "text=${paragraphs.count { p -> p is DynamicParagraph.Text }} " +
                     "img=${paragraphs.count { p -> p is DynamicParagraph.Image }}",
             )
+            // 列表卡片缩略图只读 images；段落里的图片段要并进来，否则纯图文/段落图片动态在列表里缺图。
+            paragraphs.filterIsInstance<DynamicParagraph.Image>()
+                .map { it.url }
+                .forEach { u -> if (u.isNotBlank() && u !in images) images.add(u) }
         }
 
-        if (text.isBlank() && images.isEmpty() && title.isNullOrBlank()) {
+        // 保留条件：有正文 / 有图 / 有标题 / 有段落内容 / 是转发动态（原动态内容在 orig 子树）。
+        val hasOrig = origEarly != null
+        if (text.isBlank() && images.isEmpty() && title.isNullOrBlank() &&
+            paragraphs.isEmpty() && !hasOrig
+        ) {
             logFeedDrop(it, modules, major, moduleDynamic)
             return null
         }
