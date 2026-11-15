@@ -1092,6 +1092,7 @@ internal fun PlayerActivity.handlePlaybackEnded(engine: BlblPlayerEngine) {
         AppPrefs.PLAYER_PLAYBACK_MODE_EXIT -> finish()
 
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST,
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE,
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST,
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND,
         AppPrefs.PLAYER_PLAYBACK_MODE_RECOMMEND,

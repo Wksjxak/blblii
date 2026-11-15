@@ -1520,6 +1520,7 @@ class AppPrefs(context: Context) {
         const val PLAYER_PLAYBACK_MODE_LOOP_ONE = "loop_one"
         const val PLAYER_PLAYBACK_MODE_EXIT = "exit"
         const val PLAYER_PLAYBACK_MODE_PAGE_LIST = "page_list"
+        const val PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE = "page_list_shuffle"
         const val PLAYER_PLAYBACK_MODE_PARTS_LIST = "parts_list"
         const val PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND = "parts_list_then_recommend"
         const val PLAYER_PLAYBACK_MODE_RECOMMEND = "recommend"

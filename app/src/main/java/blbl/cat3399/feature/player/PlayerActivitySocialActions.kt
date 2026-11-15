@@ -503,6 +503,7 @@ internal fun PlayerActivity.playNextByPlaybackMode(userInitiated: Boolean) {
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND -> playPartsNextThenRecommended(userInitiated = userInitiated)
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST -> playPartsNext(userInitiated = userInitiated)
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST -> playNext(userInitiated = userInitiated)
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE -> playNextShuffled(userInitiated = userInitiated)
 
         // Special rule: when mode is exit/none/loop-one, manual Next defaults to Page List.
         AppPrefs.PLAYER_PLAYBACK_MODE_EXIT,
@@ -547,6 +548,18 @@ internal fun PlayerActivity.playNext(userInitiated: Boolean) {
         if (userInitiated) AppToast.show(this, "无下一个视频，已退出播放器")
         finish()
     }
+}
+
+internal fun PlayerActivity.playNextShuffled(userInitiated: Boolean) {
+    val list = pageListItems
+    if (list.size <= 1 || pageListIndex !in list.indices) {
+        if (userInitiated) AppToast.show(this, "无下一个视频，已退出播放器")
+        finish()
+        return
+    }
+    val candidates = list.indices.filter { it != pageListIndex }
+    val pick = candidates[kotlin.random.Random.nextInt(candidates.size)]
+    playPageListIndex(pick, showTitleHint = userInitiated)
 }
 
 internal fun PlayerActivity.playPrev(userInitiated: Boolean) {

@@ -41,6 +41,7 @@ internal sealed interface AutoNextTarget {
 private fun autoNextModeAllowsNext(mode: String): Boolean {
     return when (mode) {
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST,
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE,
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST,
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND,
         AppPrefs.PLAYER_PLAYBACK_MODE_RECOMMEND,
@@ -204,6 +205,7 @@ internal fun PlayerActivity.maybeWarmUpAutoNextTarget() {
 internal fun PlayerActivity.resolveAutoNextTargetByPlaybackMode(preloadRecommendation: Boolean): AutoNextTarget? {
     return when (resolvedPlaybackMode()) {
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST -> resolvePageAutoNextTarget()
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE -> resolvePageShuffleTarget()
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST -> resolvePartsAutoNextTarget()
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND ->
             resolvePartsAutoNextTarget()
@@ -224,6 +226,17 @@ private fun PlayerActivity.resolvePageAutoNextTarget(): AutoNextTarget.Page? {
     }
     if (nextItem.bvid.isBlank() && (nextItem.aid ?: 0L) <= 0L) return null
     return AutoNextTarget.Page(index = nextIndex, rawTitle = nextItem.title)
+}
+
+private fun PlayerActivity.resolvePageShuffleTarget(): AutoNextTarget.Page? {
+    val list = pageListItems
+    if (list.size <= 1) return null
+    val candidates = list.indices.filter { it != pageListIndex }
+    if (candidates.isEmpty()) return null
+    val pick = candidates[kotlin.random.Random.nextInt(candidates.size)]
+    val item = list[pick]
+    if (item.bvid.isBlank() && (item.aid ?: 0L) <= 0L) return null
+    return AutoNextTarget.Page(index = pick, rawTitle = item.title)
 }
 
 private fun PlayerActivity.resolvePartsAutoNextTarget(): AutoNextTarget.Parts? {
