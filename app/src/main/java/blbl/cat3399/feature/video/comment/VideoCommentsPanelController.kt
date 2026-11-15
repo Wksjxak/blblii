@@ -506,7 +506,7 @@ internal class VideoCommentsPanelController(
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException) return@launch
-                    AppLog.w(LOG_TAG, "reloadComments failed oid=$oid sort=$commentSort", t)
+                    AppLog.w(LOG_TAG, "reloadComments failed oid=$oid type=$commentType sort=$commentSort", t)
                     AppToast.show(context, commentLoadErrorMessage(t))
                     if (commentsState.items.isEmpty()) {
                         views.hint.text = context.getString(R.string.player_comment_load_failed)
@@ -547,7 +547,7 @@ internal class VideoCommentsPanelController(
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException) return@launch
-                    AppLog.w(LOG_TAG, "loadMoreComments failed oid=$oid sort=$commentSort page=$nextPage", t)
+                    AppLog.w(LOG_TAG, "loadMoreComments failed oid=$oid type=$commentType sort=$commentSort page=$nextPage", t)
                     AppToast.show(context, commentLoadErrorMessage(t))
                 } finally {
                     if (token == commentsFetchToken) commentsFetchJob = null

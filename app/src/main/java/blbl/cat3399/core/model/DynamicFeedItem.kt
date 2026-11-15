@@ -14,6 +14,9 @@ sealed class DynamicFeedItem {
         val dynId: String,
         val dynOid: Long?,
         val commentType: Int,
+        /** 评论 oid/type 是否直接取自接口 `basic.comment_id_str/comment_type`；
+         *  简版图文接口不带 basic，需要打开评论时再从详情接口补一次路由。 */
+        val commentRouted: Boolean = false,
         val text: String,
         val title: String?,
         val images: List<String>,

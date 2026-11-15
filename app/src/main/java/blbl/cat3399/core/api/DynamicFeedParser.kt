@@ -17,6 +17,12 @@ internal object DynamicFeedParser {
 
     private const val TAG = "BiliApi"
 
+    // 评论区业务类型（与 x/v2/reply 的 type 参数一致）。
+    private const val COMMENT_TYPE_DRAW = 11
+    private const val COMMENT_TYPE_ARTICLE = 12
+    private const val COMMENT_TYPE_MUSIC = 14
+    private const val COMMENT_TYPE_DYNAMIC = 17
+
     /** 已在图文/视频分支显式解析的 major 子对象键；其余键出现在这里会打未识别诊断日志。 */
     private val HANDLED_MAJOR_KEYS = setOf(
         "archive", "ugc_season", "opus", "draw", "article", "live_reverse", "live_rcmd",
@@ -81,6 +87,10 @@ internal object DynamicFeedParser {
         val images = ArrayList<String>()
         var title: String? = null
         var isOpus = false
+        var isDraw = false
+        var isArticle = false
+        var isMusic = false
+        var albumId: Long? = null
         var opusId: Long? = null
         val paragraphs = ArrayList<DynamicParagraph>()
 
@@ -114,6 +124,8 @@ internal object DynamicFeedParser {
             }
 
             m.optJSONObject("draw")?.let { draw ->
+                isDraw = true
+                albumId = draw.optLong("id", 0L).takeIf { v -> v > 0L }
                 draw.optJSONArray("items")?.let { arr ->
                     for (k in 0 until arr.length()) {
                         val u = arr.optJSONObject(k)?.optString("src", "")
@@ -124,6 +136,7 @@ internal object DynamicFeedParser {
 
             // 老动态类型兜底：专栏(cv)、直播回放/预约
             m.optJSONObject("article")?.let { art ->
+                isArticle = true
                 if (title == null) {
                     title = art.optString("title", "").trim()
                         .ifBlank { art.optString("jump_title", "").trim() }
@@ -177,6 +190,7 @@ internal object DynamicFeedParser {
                 lv.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
             }
             m.optJSONObject("music")?.let { mu ->
+                isMusic = true
                 if (title == null) title = mu.optString("label", "").trim().ifBlank { null }
                 mu.optString("cover", "").trim().takeIf { it.isNotBlank() }?.let { images.add(it) }
             }
@@ -215,9 +229,20 @@ internal object DynamicFeedParser {
         val commentOid = basic?.optString("comment_id_str", "")?.toLongOrNull()
             ?: basic?.optLong("comment_id", 0L)?.takeIf { v -> v > 0L }
         val commentTypeFromBasic = basic?.optInt("comment_type", 0)?.takeIf { v -> v > 0 }
-        val finalCommentType = commentTypeFromBasic ?: (if (isOpus) 12 else 17)
+        // 兜底评论业务类型（basic.comment_type 缺失时按 major 推断）：
+        // 图文/相簿=11，专栏=12，音频=14，纯文字/转发/普通分享/直播=17。
+        val fallbackCommentType = when {
+            isOpus || isDraw -> COMMENT_TYPE_DRAW
+            isArticle -> COMMENT_TYPE_ARTICLE
+            isMusic -> COMMENT_TYPE_MUSIC
+            else -> COMMENT_TYPE_DYNAMIC
+        }
+        val finalCommentType = commentTypeFromBasic ?: fallbackCommentType
+        val routedFromBasic = commentOid != null && commentTypeFromBasic != null
         val finalOid = commentOid ?: runCatching {
-            desc?.optLong("dyn_id", 0L)?.takeIf { v -> v > 0L }
+            albumId
+                ?: opusId
+                ?: desc?.optLong("dyn_id", 0L)?.takeIf { v -> v > 0L }
                 ?: desc?.optString("dyn_str", "")?.toLongOrNull()
                 ?: it.optLong("id", 0L).takeIf { v -> v > 0L }
                 ?: it.optString("id_str", "").toLongOrNull()
@@ -267,6 +292,7 @@ internal object DynamicFeedParser {
             dynId = rawId,
             dynOid = finalOid,
             commentType = finalCommentType,
+            commentRouted = routedFromBasic,
             text = text,
             title = title,
             images = images.take(3),

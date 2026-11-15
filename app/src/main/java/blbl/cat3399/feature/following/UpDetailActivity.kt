@@ -2163,11 +2163,20 @@ class UpDetailActivity : BaseActivity() {
     }
 
     private fun openDynamicComments(item: DynamicFeedItem.Rich) {
-        val oid = item.dynOid
-        if (oid == null || oid <= 0L) {
+        if (item.dynOid == null || item.dynOid <= 0L) {
             AppToast.show(this, "该动态暂无评论入口")
             return
         }
+        // 简版图文条目不带 basic 评论路由，先从详情接口补一次 oid/type；失败再回退列表兜底值。
+        lifecycleScope.launch {
+            val routing = if (!item.commentRouted) BiliApi.dynamicCommentRouting(item.dynId) else null
+            val oid = routing?.first ?: item.dynOid!!
+            val commentType = routing?.second ?: item.commentType
+            showDynamicCommentsPopup(oid = oid, commentType = commentType)
+        }
+    }
+
+    private fun showDynamicCommentsPopup(oid: Long, commentType: Int) {
         var controller: VideoCommentsPanelController? = null
         AppPopup.custom(
             context = this,
@@ -2209,7 +2218,7 @@ class UpDetailActivity : BaseActivity() {
                     upMidProvider = { mid },
                     imageViewer = null,
                     isActive = { true },
-                    commentType = item.commentType,
+                    commentType = commentType,
                     // 动态评论区用独立字号，不占用视频评论区设置
                     textSizeSpOverride = BiliClient.prefs.dynamicCommentTextSizeSp,
                     // 评论图片改用全屏 Dialog 看图，方向键不会漏到后面的评论列表

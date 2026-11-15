@@ -69,6 +69,9 @@ object BiliApi {
     private const val PGC_PAGE_BUILD_DEFAULT = 8130300
     private const val PGC_PAGE_MOBI_APP_DEFAULT = "android"
 
+    // 评论区业务类型（x/v2/reply 的 type 参数）。
+    private const val COMMENT_TYPE_DRAW = 11
+
     // https://www.bilibili.com/read/cv11815732
     private const val BV_XOR = 177451812L
     private const val BV_ADD = 8728348608L
@@ -1858,11 +1861,20 @@ object BiliApi {
                 val cover = obj.optJSONObject("cover")?.optString("url", "").orEmpty().trim()
                 val images = if (cover.isNotBlank()) listOf(cover) else emptyList()
                 if (content.isBlank() && images.isEmpty()) continue
+
+                // 简版条目多数不带 basic；个别形态会带 comment_id_str/comment_type，优先采用。
+                // 兜底：图文动态评论区类型为 11（相簿），评论 oid 若 basic 缺失需打开评论时从详情接口补。
+                val basic = obj.optJSONObject("basic")
+                val basicOid = basic?.optString("comment_id_str", "")?.toLongOrNull()
+                    ?: basic?.optLong("comment_id", 0L)?.takeIf { v -> v > 0L }
+                val basicType = basic?.optInt("comment_type", 0)?.takeIf { v -> v > 0 }
+                val routed = basicOid != null && basicType != null
                 cards.add(
                     DynamicFeedItem.Rich(
                         dynId = opusId,
-                        dynOid = opusId.toLongOrNull(),
-                        commentType = 12,
+                        dynOid = basicOid ?: opusId.toLongOrNull(),
+                        commentType = basicType ?: COMMENT_TYPE_DRAW,
+                        commentRouted = routed,
                         text = content,
                         title = null,
                         images = images,
@@ -1961,6 +1973,43 @@ object BiliApi {
             }
         }
         return paras
+    }
+
+    /**
+     * 简版图文接口不带评论路由字段；打开评论前从详情接口补取 basic.comment_id_str / comment_type。
+     * 返回 (评论 oid, 评论业务类型)，取不到返回 null（调用方回退列表里的兜底值）。
+     */
+    suspend fun dynamicCommentRouting(dynId: String): Pair<Long, Int>? {
+        val features =
+            "itemOpusStyle,opusBigCover,onlyfansVote,decorationCard,onlyfansAssetsV2,ugcDelete"
+        val endpoints = listOf(
+            "https://api.bilibili.com/x/polymer/web-dynamic/v1/opus/detail",
+            "https://api.bilibili.com/x/polymer/web-dynamic/v1/detail",
+        )
+        for (endpoint in endpoints) {
+            val routing =
+                runCatching {
+                    val json =
+                        BiliClient.getJson(
+                            BiliClient.withQuery(endpoint, linkedMapOf("id" to dynId, "features" to features)),
+                        )
+                    if (json.optInt("code", -1) != 0) return@runCatching null
+                    val basic =
+                        json.optJSONObject("data")?.optJSONObject("item")?.optJSONObject("basic")
+                            ?: return@runCatching null
+                    val oid =
+                        basic.optString("comment_id_str", "").toLongOrNull()
+                            ?: basic.optLong("comment_id", 0L).takeIf { v -> v > 0L }
+                    val type = basic.optInt("comment_type", 0).takeIf { v -> v > 0 }
+                    if (oid != null && type != null) oid to type else null
+                }.getOrNull()
+            if (routing != null) {
+                AppLog.d(TAG, "dynamicCommentRouting dyn=$dynId oid=${routing.first} type=${routing.second}")
+                return routing
+            }
+        }
+        AppLog.w(TAG, "dynamicCommentRouting dyn=$dynId routing=null")
+        return null
     }
 
     /** 动态图片专用接口：/x/polymer/web-dynamic/v1/detail/pic?id=
