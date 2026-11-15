@@ -126,4 +126,8 @@ jobs:
           while IFS= read -r old_apk; do
             [ -n "$old_apk" ] && gh release delete-asset "$RELEASE_TAG" "$old_apk" --yes || true
           done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep '\.apk$' || true)
-          gh release upload "$RELEASE_TAG" "${APK_PATH}#blbl-android-${VERSION_NAME}-${CHANNEL}.apk" --clobber
+          # 重命名后再上传：部分 gh 版本不支持路径#别名语法，直接以目标文件名落盘，
+          # 资产名与更新器约定一致（blbl-android-<版本>-<通道>.apk）。
+          ASSET_NAME="blbl-android-${VERSION_NAME}-${CHANNEL}.apk"
+          cp "${APK_PATH}" "${ASSET_NAME}"
+          gh release upload "$RELEASE_TAG" "${ASSET_NAME}" --clobber
