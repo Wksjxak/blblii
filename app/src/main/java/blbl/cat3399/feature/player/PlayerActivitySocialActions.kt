@@ -365,6 +365,9 @@ internal fun PlayerActivity.updatePlaylistControls() {
             AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST -> hasControlContext(PlayerVideoListKind.PARTS)
             AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND ->
                 hasControlContext(PlayerVideoListKind.PARTS) || hasControlContext(PlayerVideoListKind.PAGE)
+            AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_REVERSE ->
+                hasControlContext(PlayerVideoListKind.PAGE) &&
+                    (pageListIndex < pageListItems.lastIndex || hasMorePlaylistItems(PlayerVideoListKind.PAGE))
             else -> hasControlContext(PlayerVideoListKind.PAGE)
         }
     val nextEnabled =
@@ -373,6 +376,8 @@ internal fun PlayerActivity.updatePlaylistControls() {
             AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST -> hasControlContext(PlayerVideoListKind.PARTS)
             AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND ->
                 hasControlContext(PlayerVideoListKind.PARTS) || hasControlContext(PlayerVideoListKind.RECOMMEND)
+            AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_REVERSE ->
+                hasControlContext(PlayerVideoListKind.PAGE) && pageListIndex > 0
             AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST -> hasControlContext(PlayerVideoListKind.PAGE)
             else -> hasControlContext(PlayerVideoListKind.PAGE)
         }
@@ -503,6 +508,7 @@ internal fun PlayerActivity.playNextByPlaybackMode(userInitiated: Boolean) {
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST_THEN_RECOMMEND -> playPartsNextThenRecommended(userInitiated = userInitiated)
         AppPrefs.PLAYER_PLAYBACK_MODE_PARTS_LIST -> playPartsNext(userInitiated = userInitiated)
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST -> playNext(userInitiated = userInitiated)
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_REVERSE -> playNextReversed(userInitiated = userInitiated)
         AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE -> playNextShuffled(userInitiated = userInitiated)
 
         // Special rule: when mode is exit/none/loop-one, manual Next defaults to Page List.
@@ -524,6 +530,7 @@ internal fun PlayerActivity.playPrevByPlaybackMode(userInitiated: Boolean) {
             } else {
                 playPrev(userInitiated = userInitiated)
             }
+        AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_REVERSE -> playPrevReversed(userInitiated = userInitiated)
         else -> playPrev(userInitiated = userInitiated)
     }
 }
@@ -550,6 +557,23 @@ internal fun PlayerActivity.playNext(userInitiated: Boolean) {
     }
 }
 
+/** 倒放视频列表的「下一个」：沿列表向前走（index - 1）。 */
+internal fun PlayerActivity.playNextReversed(userInitiated: Boolean) {
+    val list = pageListItems
+    if (list.isEmpty() || pageListIndex !in list.indices) {
+        if (userInitiated) AppToast.show(this, "无上一个视频，已退出播放器")
+        finish()
+        return
+    }
+    val prev = pageListIndex - 1
+    if (prev in list.indices) {
+        playPageListIndex(prev, showTitleHint = userInitiated)
+        return
+    }
+    if (userInitiated) AppToast.show(this, "无上一个视频，已退出播放器")
+    finish()
+}
+
 internal fun PlayerActivity.playNextShuffled(userInitiated: Boolean) {
     val list = pageListItems
     if (list.size <= 1 || pageListIndex !in list.indices) {
@@ -574,6 +598,27 @@ internal fun PlayerActivity.playPrev(userInitiated: Boolean) {
         return
     }
     playPageListIndex(prev, showTitleHint = userInitiated)
+}
+
+/** 倒放视频列表的「上一个」：沿列表向后走（index + 1），必要时续载下一页。 */
+internal fun PlayerActivity.playPrevReversed(userInitiated: Boolean) {
+    val list = pageListItems
+    if (list.isEmpty() || pageListIndex !in list.indices) {
+        if (userInitiated) AppToast.show(this, "暂无上一个视频")
+        return
+    }
+    val next = pageListIndex + 1
+    if (next in list.indices) {
+        playPageListIndex(next, showTitleHint = userInitiated)
+        return
+    }
+    ensurePlaylistIndexLoaded(kind = PlayerVideoListKind.PAGE, index = next) { available ->
+        if (available) {
+            playPageListIndex(next, showTitleHint = userInitiated)
+        } else if (userInitiated) {
+            AppToast.show(this, "已是最后一个视频")
+        }
+    }
 }
 
 internal fun PlayerActivity.playPartsNext(userInitiated: Boolean) {
