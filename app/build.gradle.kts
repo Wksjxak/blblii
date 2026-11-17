@@ -129,6 +129,12 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
+    // 老系统（API 21~27）没有 ImageDecoder，用 APNG4Android 统一播放 GIF / 动态 WebP / APNG。
+    // 三个模块都支持 minSdk 21；GIF 模块带轻量 native 解码器，APNG/WebP 为纯 Java 解码。
+    implementation("com.github.penfeizhou.android.animation:apng:3.0.5")
+    implementation("com.github.penfeizhou.android.animation:awebp:3.0.5")
+    implementation("com.github.penfeizhou.android.animation:gif:3.0.5")
+
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

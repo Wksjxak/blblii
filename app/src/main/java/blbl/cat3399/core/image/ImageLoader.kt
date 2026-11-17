@@ -64,6 +64,8 @@ object ImageLoader {
             val drawable = view.drawable
             if (drawable != null && drawable !== placeholder) {
                 inFlight.remove(view)?.cancel()
+                // 同一个 URL 重新绑定时，若动图之前被 stop 过则恢复播放。
+                AnimatedImageDecoder.startIfAnimated(drawable)
                 return
             }
             // If the same URL is already loading, keep the current placeholder.
@@ -104,7 +106,7 @@ object ImageLoader {
                         if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
                             stopAnimated(view)
                             view.setImageDrawable(animated)
-                            (animated as? AnimatedImageDecoder.MovieDrawable)?.start()
+                            AnimatedImageDecoder.startIfAnimated(animated)
                         }
                         return@launch
                     }

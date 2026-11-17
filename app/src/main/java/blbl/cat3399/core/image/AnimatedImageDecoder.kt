@@ -6,11 +6,17 @@ import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.ColorFilter
 import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.SystemClock
 import android.view.Choreographer
 import blbl.cat3399.core.log.AppLog
+import com.github.penfeizhou.animation.FrameAnimationDrawable
+import com.github.penfeizhou.animation.apng.APNGDrawable
+import com.github.penfeizhou.animation.gif.GifDrawable
+import com.github.penfeizhou.animation.loader.ByteBufferLoader
+import com.github.penfeizhou.animation.webp.WebPDrawable
 import java.nio.ByteBuffer
 import kotlin.math.roundToInt
 
@@ -18,7 +24,8 @@ import kotlin.math.roundToInt
  * 动图解码：仅用于用户主动打开的全屏看图器。
  *
  * - API 28(P)+：[ImageDecoder] 直接解码 GIF / 动态 WebP / APNG 为 [AnimatedImageDrawable]。
- * - API 21~27：系统 [Movie] 只支持 GIF，其余动图类型退回首帧静态位图（由调用方兜底）。
+ * - API 21~27：系统没有 ImageDecoder，改用 APNG4Android 解码 GIF / 动态 WebP / APNG；
+ *   其 GIF 模块带 native 解码器，APNG/WebP 为纯 Java 解码，均支持 minSdk 21。
  *
  * 列表/缩略图仍由 [ImageLoader] 按 URL 跳过，不在此处理。
  */
@@ -64,7 +71,32 @@ internal object AnimatedImageDecoder {
             }.onFailure { AppLog.w(TAG, "ImageDecoder failed kind=$kind", it) }.getOrNull()
         }
 
-        // 老系统只兜底 GIF；动态 WebP / APNG 交回调用方取首帧。
+        // API 21~27：用 APNG4Android 统一解码三种动图格式。
+        // 解码器只读文件头、帧数据在播放器线程里懒解码，先检查 intrinsic 尺寸确认文件可用。
+        val oldSystemDrawable =
+            runCatching {
+                when (kind) {
+                    Kind.GIF -> GifDrawable(byteBufferLoader(bytes))
+                    Kind.ANIMATED_WEBP -> WebPDrawable(byteBufferLoader(bytes))
+                    Kind.APNG -> APNGDrawable(byteBufferLoader(bytes))
+                    Kind.STATIC -> null
+                }
+            }.onFailure { AppLog.w(TAG, "APNG4Android create failed kind=$kind", it) }.getOrNull()
+
+        if (oldSystemDrawable != null && oldSystemDrawable.intrinsicWidth > 0 && oldSystemDrawable.intrinsicHeight > 0) {
+            // 全屏看图器始终循环播放；0 表示无限循环，避免部分 APNG/WebP 只播一次。
+            if (oldSystemDrawable is FrameAnimationDrawable<*>) {
+                runCatching { oldSystemDrawable.setLoopLimit(0) }
+                    .onFailure { AppLog.w(TAG, "setLoopLimit failed kind=$kind", it) }
+            }
+            AppLog.d(
+                TAG,
+                "animated via APNG4Android kind=$kind size=${oldSystemDrawable.intrinsicWidth}x${oldSystemDrawable.intrinsicHeight}",
+            )
+            return oldSystemDrawable
+        }
+
+        // 最后兜底：老系统 GIF 仍可用系统 Movie 播放。
         if (kind != Kind.GIF) return null
         val movie = Movie.decodeByteArray(bytes, 0, bytes.size) ?: return null
         if (movie.width() <= 0 || movie.height() <= 0) return null
@@ -73,12 +105,30 @@ internal object AnimatedImageDecoder {
         return MovieDrawable(movie)
     }
 
+    private fun byteBufferLoader(bytes: ByteArray): ByteBufferLoader =
+        object : ByteBufferLoader() {
+            override fun getByteBuffer(): ByteBuffer = ByteBuffer.wrap(bytes)
+        }
+
+    /** 启动动图 Drawable（在设置到 View 之后由主线程调用）。 */
+    fun startIfAnimated(drawable: Drawable?) {
+        when (drawable) {
+            is MovieDrawable -> drawable.start()
+            is Animatable -> {
+                if (drawable.isRunning) return
+                runCatching { drawable.start() }
+                    .onFailure { AppLog.w(TAG, "start animated failed", it) }
+            }
+        }
+    }
+
     /** 停止正在播放的动图 Drawable，避免换图/关闭后还在后台跑帧。 */
     fun stopIfAnimated(drawable: Drawable?) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && drawable is AnimatedImageDrawable) {
-            runCatching { drawable.stop() }
+        when (drawable) {
+            is AnimatedImageDrawable -> runCatching { drawable.stop() }
+            is MovieDrawable -> drawable.stop()
+            is Animatable -> runCatching { drawable.stop() }
         }
-        if (drawable is MovieDrawable) drawable.stop()
     }
 
     private fun detect(bytes: ByteArray): Kind {
@@ -179,9 +229,9 @@ internal object AnimatedImageDecoder {
 
         override fun setVisible(visible: Boolean, restart: Boolean): Boolean {
             val changed = super.setVisible(visible, restart)
-            // 页面不可见时停掉帧回调，避免后台空转抢占主线程。
+            // 页面不可见时停掉帧回调，避免后台空转抢占主线程；重新可见时恢复。
             if (visible) {
-                if (restart) start()
+                if (!running) start()
             } else {
                 stop()
             }
