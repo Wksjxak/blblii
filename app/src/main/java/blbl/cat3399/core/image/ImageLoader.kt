@@ -95,7 +95,11 @@ object ImageLoader {
                 // 全屏看图器允许动图：先尝试解码成可循环播放的动图 Drawable；
                 // 失败（静态图 / 老系统不支持的格式）再退回首帧静态位图。
                 if (allowAnimated) {
-                    val animated = withContext(Dispatchers.Default) { AnimatedImageDecoder.decodeAnimated(bytes) }
+                    // 按控件实际显示尺寸降采样解码，减少大动图每帧解码与位图上传开销。
+                    val animated =
+                        withContext(Dispatchers.Default) {
+                            AnimatedImageDecoder.decodeAnimated(bytes, targetSidePx = bucket)
+                        }
                     if (animated != null) {
                         if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
                             stopAnimated(view)

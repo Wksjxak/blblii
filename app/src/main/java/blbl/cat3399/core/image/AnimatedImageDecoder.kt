@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.view.Choreographer
 import blbl.cat3399.core.log.AppLog
 import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 
 /**
  * 动图解码：仅用于用户主动打开的全屏看图器。
@@ -29,18 +30,33 @@ internal object AnimatedImageDecoder {
     /**
      * 尝试把字节流解码成可播放的动图 Drawable；失败（静态图 / 老系统不支持的格式）返回 null，
      * 调用方应退回静态位图解码。
+     *
+     * [targetSidePx] 为期望的长边像素。动图按视图尺寸降采样解码，能显著减少每帧解码/上传开销，
+     * 大尺寸 GIF/WebP 在全屏查看器里播放更顺滑；传 0 表示保持原始尺寸。
      */
-    fun decodeAnimated(bytes: ByteArray): Drawable? {
+    fun decodeAnimated(bytes: ByteArray, targetSidePx: Int = 0): Drawable? {
         val kind = detect(bytes)
         if (kind == Kind.STATIC) return null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             return runCatching {
                 val src = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-                val drawable = ImageDecoder.decodeDrawable(src)
+                val drawable =
+                    ImageDecoder.decodeDrawable(src) { decoder, info, _ ->
+                        // 只缩小不放大，避免小图被强行拉伸后变糊、变慢。
+                        val maxSide = maxOf(info.size.width, info.size.height)
+                        if (targetSidePx >= 1 && maxSide > targetSidePx) {
+                            val scale = targetSidePx.toFloat() / maxSide.toFloat()
+                            val targetWidth = (info.size.width * scale).roundToInt().coerceAtLeast(1)
+                            val targetHeight = (info.size.height * scale).roundToInt().coerceAtLeast(1)
+                            decoder.setTargetSize(targetWidth, targetHeight)
+                        }
+                    }
                 if (drawable is AnimatedImageDrawable) {
+                    // 全屏看图器里始终循环播放；部分动图文件只声明播放一次或有限次数。
+                    drawable.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                     drawable.start()
-                    AppLog.d(TAG, "animated via ImageDecoder kind=$kind")
+                    AppLog.d(TAG, "animated via ImageDecoder kind=$kind target=$targetSidePx")
                     drawable
                 } else {
                     null
@@ -125,6 +141,11 @@ internal object AnimatedImageDecoder {
         private var running = false
         private var startTime = 0L
         private val durationMs = movie.duration().coerceAtLeast(1)
+        // 复用 Paint，避免每秒 60 次分配导致 GC 抖动。
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isFilterBitmap = true
+            isDither = true
+        }
 
         private val frameCallback =
             object : Choreographer.FrameCallback {
@@ -153,7 +174,18 @@ internal object AnimatedImageDecoder {
         override fun getIntrinsicHeight(): Int = movie.height()
 
         override fun draw(canvas: android.graphics.Canvas) {
-            movie.draw(canvas, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG))
+            movie.draw(canvas, 0f, 0f, paint)
+        }
+
+        override fun setVisible(visible: Boolean, restart: Boolean): Boolean {
+            val changed = super.setVisible(visible, restart)
+            // 页面不可见时停掉帧回调，避免后台空转抢占主线程。
+            if (visible) {
+                if (restart) start()
+            } else {
+                stop()
+            }
+            return changed
         }
 
         override fun setAlpha(alpha: Int) {
