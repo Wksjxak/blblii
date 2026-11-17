@@ -172,13 +172,22 @@ internal class DanmakuEngine(
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
-    // 合并计数角标（×N）用独立等宽字体，与正文区分。
+    // 合并计数角标（×N）用独立等宽字体，与正文区分；数字部分再改用斜体。
     private val badgeFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.MONOSPACE
         isSubpixelText = true
     }
     private val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.MONOSPACE
+        style = Paint.Style.STROKE
+        isSubpixelText = true
+    }
+    private val badgeDigitFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
+        isSubpixelText = true
+    }
+    private val badgeDigitStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
@@ -413,9 +422,12 @@ internal class DanmakuEngine(
         if (badgeFill.textSize != ts) {
             badgeFill.textSize = ts
             badgeStroke.textSize = ts
+            badgeDigitFill.textSize = ts
+            badgeDigitStroke.textSize = ts
         }
         if (badgeStroke.strokeWidth != strokeWidthPx) {
             badgeStroke.strokeWidth = strokeWidthPx
+            badgeDigitStroke.strokeWidth = strokeWidthPx
         }
 
         val outlinePad = outlinePadPx
@@ -1238,8 +1250,12 @@ internal class DanmakuEngine(
                 is DanmakuInlineSegment.Emote -> w += emoteSizePx
                 is DanmakuInlineSegment.HighLikeIcon ->
                     w += emoteSizePx + inlineIconGapPx(emoteSizePx)
-                is DanmakuInlineSegment.CountBadge ->
-                    w += badgeFill.measureText(text, seg.start, seg.end)
+                is DanmakuInlineSegment.CountBadge -> {
+                    // 「×N」：× 用常规等宽，数字用斜体等宽，两段分别测量。
+                    val digitsStart = (seg.start + 1).coerceAtMost(seg.end)
+                    if (digitsStart > seg.start) w += badgeFill.measureText(text, seg.start, digitsStart)
+                    if (seg.end > digitsStart) w += badgeDigitFill.measureText(text, digitsStart, seg.end)
+                }
             }
         }
         return w + outlinePad * 2f
@@ -1314,6 +1330,8 @@ internal class DanmakuEngine(
         }
         drawFill.color = (opacityAlpha shl 24) or rgb
         badgeFill.color = drawFill.color
+        badgeDigitFill.color = drawFill.color
+        badgeDigitStroke.color = drawStroke.color
 
         val textX = x + outlinePad
         val baseline = yTop + baselineOffset
@@ -1360,11 +1378,21 @@ internal class DanmakuEngine(
                 }
                 is DanmakuInlineSegment.CountBadge -> {
                     if (seg.end > seg.start) {
-                        if (drawStrokeEnabled) {
-                            canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeStroke)
+                        val digitsStart = (seg.start + 1).coerceAtMost(seg.end)
+                        if (digitsStart > seg.start) {
+                            if (drawStrokeEnabled) {
+                                canvas.drawText(text, seg.start, digitsStart, cursorX, baseline, badgeStroke)
+                            }
+                            canvas.drawText(text, seg.start, digitsStart, cursorX, baseline, badgeFill)
+                            cursorX += badgeFill.measureText(text, seg.start, digitsStart)
                         }
-                        canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeFill)
-                        cursorX += badgeFill.measureText(text, seg.start, seg.end)
+                        if (seg.end > digitsStart) {
+                            if (drawStrokeEnabled) {
+                                canvas.drawText(text, digitsStart, seg.end, cursorX, baseline, badgeDigitStroke)
+                            }
+                            canvas.drawText(text, digitsStart, seg.end, cursorX, baseline, badgeDigitFill)
+                            cursorX += badgeDigitFill.measureText(text, digitsStart, seg.end)
+                        }
                     }
                 }
                 DanmakuInlineSegment.HighLikeIcon -> {

@@ -88,13 +88,22 @@ internal class CacheManager(
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
-    // 合并计数角标（×N）用独立等宽字体。
+    // 合并计数角标（×N）用独立等宽字体；数字部分再改用斜体。
     private val badgeFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.MONOSPACE
         isSubpixelText = true
     }
     private val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.MONOSPACE
+        style = Paint.Style.STROKE
+        isSubpixelText = true
+    }
+    private val badgeDigitFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
+        isSubpixelText = true
+    }
+    private val badgeDigitStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)
         style = Paint.Style.STROKE
         isSubpixelText = true
     }
@@ -220,7 +229,10 @@ internal class CacheManager(
         stroke.strokeWidth = strokeWidth
         badgeFill.textSize = textSize
         badgeStroke.textSize = textSize
+        badgeDigitFill.textSize = textSize
+        badgeDigitStroke.textSize = textSize
         badgeStroke.strokeWidth = strokeWidth
+        badgeDigitStroke.strokeWidth = strokeWidth
 
         fill.getFontMetrics(fontMetrics)
         val textHeightPx = (fontMetrics.descent - fontMetrics.ascent).coerceAtLeast(1f)
@@ -245,6 +257,8 @@ internal class CacheManager(
         fill.color = (0xFF shl 24) or rgb
         badgeStroke.color = stroke.color
         badgeFill.color = fill.color
+        badgeDigitStroke.color = stroke.color
+        badgeDigitFill.color = fill.color
 
         // Placeholder colors (alpha is applied at draw-time; keep opaque-ish here).
         placeholderFill.color = (0x22 shl 24) or 0x000000
@@ -295,11 +309,21 @@ internal class CacheManager(
                         }
                         is DanmakuInlineSegment.CountBadge -> {
                             if (seg.end > seg.start) {
-                                if (drawStrokeEnabled) {
-                                    canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeStroke)
+                                val digitsStart = (seg.start + 1).coerceAtMost(seg.end)
+                                if (digitsStart > seg.start) {
+                                    if (drawStrokeEnabled) {
+                                        canvas.drawText(text, seg.start, digitsStart, cursorX, baseline, badgeStroke)
+                                    }
+                                    canvas.drawText(text, seg.start, digitsStart, cursorX, baseline, badgeFill)
+                                    cursorX += badgeFill.measureText(text, seg.start, digitsStart)
                                 }
-                                canvas.drawText(text, seg.start, seg.end, cursorX, baseline, badgeFill)
-                                cursorX += badgeFill.measureText(text, seg.start, seg.end)
+                                if (seg.end > digitsStart) {
+                                    if (drawStrokeEnabled) {
+                                        canvas.drawText(text, digitsStart, seg.end, cursorX, baseline, badgeDigitStroke)
+                                    }
+                                    canvas.drawText(text, digitsStart, seg.end, cursorX, baseline, badgeDigitFill)
+                                    cursorX += badgeDigitFill.measureText(text, digitsStart, seg.end)
+                                }
                             }
                         }
                         DanmakuInlineSegment.HighLikeIcon -> {
