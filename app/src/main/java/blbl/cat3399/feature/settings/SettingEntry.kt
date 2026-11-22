@@ -145,4 +145,6 @@ data class SettingEntry(
     val title: String,
     val value: String,
     val desc: String?,
+    /** 为 false 时置灰且不可点击；用于依赖其它开关的子设置项。 */
+    val enabled: Boolean = true,
 )

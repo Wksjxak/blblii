@@ -8,12 +8,14 @@ import blbl.cat3399.core.model.VideoCard
  *
  * 判定按卡片归属（major 类型 + 作者 mid），不再用投稿第一页 30 条 BV 集合做全局匹配。
  * 原因分桶（与日志 reason 对齐）：
- * - [Result.archiveHidden]：hideArchiveVideo=true 且为 host 本人归档视频（reason=archive）；
+ * - [Result.archiveHidden]：hideArchiveVideo=true 且为 host 本人「投稿视频」（reason=archive）；
+ *   动态视频（pub_action=发布了动态视频）不属于投稿，永远不在这里隐藏；
  * - [Result.videoHidden]：showVideo=false 时丢弃的其它视频类卡片（reason=showvideo_hidden）；
  * - [Result.dup]：stableKey 已在本页之前出现过（reason=dup，翻页去重）。
  *
  * 语义（与设置文案一致）：
- * - up_dynamic_hide_archive_video：只隐藏 UP 本人归档视频（和投稿 Tab 重复的那部分）；
+ * - up_dynamic_hide_archive_video：只隐藏 UP 本人投稿视频（和投稿 Tab 重复的那部分），
+ *   不隐藏动态视频、合集、附加分享或转发他人视频；
  * - up_dynamic_show_video：视频类动态总开关，false 时归档/合集/附加 ugc 一律不进列表。
  */
 internal object DynamicFeedFilter {
@@ -33,6 +35,8 @@ internal object DynamicFeedFilter {
         val rawSeason: Int = 0,
         /** 本页原始构成：附加分享 ugc 视频数。 */
         val rawExtra: Int = 0,
+        /** 本页原始构成：动态视频数（pub_action=发布了动态视频）。 */
+        val rawDynamicVideo: Int = 0,
         /** 本页原始构成：图文/纯文字动态数。 */
         val rawRich: Int = 0,
     ) {
@@ -53,6 +57,7 @@ internal object DynamicFeedFilter {
         var rawArchive = 0
         var rawSeason = 0
         var rawExtra = 0
+        var rawDynamicVideo = 0
         var rawRich = 0
 
         for (item in items) {
@@ -61,23 +66,24 @@ internal object DynamicFeedFilter {
                 card == null -> rawRich++
                 card.majorType == VideoCard.MAJOR_TYPE_UGC_SEASON -> rawSeason++
                 card.majorType == VideoCard.ADDITIONAL_UGC -> rawExtra++
+                card.isDynamicVideo -> rawDynamicVideo++
                 else -> rawArchive++
             }
 
-            val isArchive = card != null && card.isArchiveVideo
+            val isSubmissionArchive = card != null && card.isArchiveVideo && card.isSubmissionVideo && !card.isDynamicVideo
             val isVideo = card != null && card.isVideoCard
-            // 空间动态里作者 mid 缺失时按 host 本人处理；非空则必须与 hostMid 一致才算本人归档。
-            val ownerMatchesHost = card == null || card.ownerMid == null || card.ownerMid == hostMid
+            // 作者 mid 缺失时无法确认归属，按保守策略保留，避免误隐藏动态视频或他人视频。
+            val ownerMatchesHost = card != null && card.ownerMid == hostMid
 
             when {
-                hideArchiveVideo && isArchive && ownerMatchesHost -> archiveHidden++
+                hideArchiveVideo && isSubmissionArchive && ownerMatchesHost -> archiveHidden++
                 !showVideo && isVideo -> videoHidden++
                 !seen.add(item.stableKey) -> dup++
                 else -> fresh.add(item)
             }
         }
 
-        return Result(fresh, archiveHidden, videoHidden, dup, rawArchive, rawSeason, rawExtra, rawRich)
+        return Result(fresh, archiveHidden, videoHidden, dup, rawArchive, rawSeason, rawExtra, rawDynamicVideo, rawRich)
     }
 
     /** 调试用：保留下来的视频卡片 BV（仅 debug 包打印）。 */

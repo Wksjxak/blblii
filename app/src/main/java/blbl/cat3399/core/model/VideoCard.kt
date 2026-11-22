@@ -35,8 +35,12 @@ data class VideoCard(
      * 非动态接口构造的卡片留空（null），不参与归档判定。
      */
     val majorType: String? = null,
+    /** 动态接口的 pub_action 表明这是「投稿了视频」，与投稿 Tab 重复。 */
+    val isSubmissionVideo: Boolean = false,
+    /** 动态接口的 pub_action 表明这是「发布了动态视频」，只存在于动态、不属于投稿。 */
+    val isDynamicVideo: Boolean = false,
 ) {
-    /** 是否为 UP 主自己投的归档视频（major.archive / DYNAMIC_TYPE_AV）。 */
+    /** 是否为 major.archive 视频（投稿视频和动态视频共用该类型，还需看 [isSubmissionVideo]）。 */
     val isArchiveVideo: Boolean
         get() = majorType == MAJOR_TYPE_ARCHIVE
 

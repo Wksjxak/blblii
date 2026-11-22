@@ -482,8 +482,17 @@ class SettingsRenderer(
                     SettingEntry(
                         SettingId.UpDynamicHideArchiveVideo,
                         "动态栏隐藏本人投稿视频",
-                        if (prefs.upDynamicHideArchiveVideo) "开" else "关",
-                        "仅隐藏与投稿 Tab 重复的本人投稿视频；合集、附加分享、转发他人视频不受影响",
+                        when {
+                            !prefs.upDynamicShowVideo -> "不可改"
+                            prefs.upDynamicHideArchiveVideo -> "开"
+                            else -> "关"
+                        },
+                        if (!prefs.upDynamicShowVideo) {
+                            "需先开启「动态栏显示视频类动态」"
+                        } else {
+                            "仅隐藏与投稿 Tab 重复的本人投稿视频；动态视频、合集、附加分享、转发他人视频不受影响"
+                        },
+                        enabled = prefs.upDynamicShowVideo,
                     ),
                     SettingEntry(
                         SettingId.UpDynamicShowVideo,

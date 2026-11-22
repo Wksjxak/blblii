@@ -16,6 +16,8 @@ class DynamicFeedFilterTest {
         bvid: String,
         majorType: String?,
         ownerMid: Long? = hostMid,
+        isSubmissionVideo: Boolean = true,
+        isDynamicVideo: Boolean = false,
     ) = DynamicFeedItem.Video(
         VideoCard(
             bvid = bvid,
@@ -31,6 +33,8 @@ class DynamicFeedFilterTest {
             pubDate = null,
             pubDateText = null,
             majorType = majorType,
+            isSubmissionVideo = isSubmissionVideo,
+            isDynamicVideo = isDynamicVideo,
         ),
     )
 
@@ -57,6 +61,25 @@ class DynamicFeedFilterTest {
     }
 
     @Test
+    fun `dynamic video is kept when hiding host archive`() {
+        val items = listOf(video("BV1DV", VideoCard.MAJOR_TYPE_ARCHIVE, isSubmissionVideo = false, isDynamicVideo = true))
+        val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = true, showVideo = true, HashSet())
+
+        assertEquals(0, r.archiveHidden)
+        assertEquals(1, r.rawDynamicVideo)
+        assertEquals(1, r.fresh.size)
+    }
+
+    @Test
+    fun `unknown archive is kept when hiding host archive`() {
+        val items = listOf(video("BV1UN", VideoCard.MAJOR_TYPE_ARCHIVE, isSubmissionVideo = false, isDynamicVideo = false))
+        val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = true, showVideo = true, HashSet())
+
+        assertEquals(0, r.archiveHidden)
+        assertEquals(1, r.fresh.size)
+    }
+
+    @Test
     fun `archive from other author is kept when hiding host archive`() {
         val items = listOf(video("BV1B", VideoCard.MAJOR_TYPE_ARCHIVE, otherMid))
         val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = true, showVideo = true, HashSet())
@@ -66,12 +89,12 @@ class DynamicFeedFilterTest {
     }
 
     @Test
-    fun `archive with missing owner mid is treated as host`() {
+    fun `archive with missing owner mid is kept conservatively`() {
         val items = listOf(video("BV1C", VideoCard.MAJOR_TYPE_ARCHIVE, ownerMid = null))
         val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = true, showVideo = true, HashSet())
 
-        assertEquals(1, r.archiveHidden)
-        assertTrue(r.fresh.isEmpty())
+        assertEquals(0, r.archiveHidden)
+        assertEquals(1, r.fresh.size)
     }
 
     @Test
@@ -92,6 +115,37 @@ class DynamicFeedFilterTest {
         assertEquals(1, r.rawSeason)
         assertEquals(1, r.rawExtra)
         assertEquals(1, r.rawRich)
+    }
+
+    @Test
+    fun `showVideo false drops dynamic video and submission`() {
+        val items = listOf(
+            video("BV1S", VideoCard.MAJOR_TYPE_ARCHIVE),
+            video("BV1DV2", VideoCard.MAJOR_TYPE_ARCHIVE, isSubmissionVideo = false, isDynamicVideo = true),
+            rich("rich-3"),
+        )
+        val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = false, showVideo = false, HashSet())
+
+        assertEquals(2, r.videoHidden)
+        assertEquals(0, r.archiveHidden)
+        assertEquals(1, r.fresh.size)
+        assertEquals(1, r.rawDynamicVideo)
+    }
+
+    @Test
+    fun `hide archive and showVideo false hide all videos but keep rich`() {
+        val items = listOf(
+            video("BV1S2", VideoCard.MAJOR_TYPE_ARCHIVE),
+            video("BV1DV3", VideoCard.MAJOR_TYPE_ARCHIVE, isSubmissionVideo = false, isDynamicVideo = true),
+            video("BV1SE", VideoCard.MAJOR_TYPE_UGC_SEASON),
+            rich("rich-4"),
+        )
+        val r = DynamicFeedFilter.filter(items, hostMid, hideArchiveVideo = true, showVideo = false, HashSet())
+
+        assertEquals(1, r.archiveHidden)
+        assertEquals(2, r.videoHidden)
+        assertEquals(1, r.fresh.size)
+        assertTrue(r.fresh.first() is DynamicFeedItem.Rich)
     }
 
     @Test

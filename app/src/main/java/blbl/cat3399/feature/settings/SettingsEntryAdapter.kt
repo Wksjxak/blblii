@@ -58,6 +58,8 @@ class SettingsEntryAdapter(
     class Vh(private val binding: ItemSettingEntryBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: SettingEntry, onClick: (SettingEntry) -> Unit) {
             binding.root.tag = item.id
+            binding.root.isEnabled = item.enabled
+            binding.root.alpha = if (item.enabled) 1f else 0.45f
             binding.tvTitle.text = item.title
             if (item.value.isBlank()) {
                 binding.tvValue.visibility = android.view.View.GONE
@@ -72,7 +74,9 @@ class SettingsEntryAdapter(
                 binding.tvDesc.visibility = android.view.View.VISIBLE
                 binding.tvDesc.text = item.desc
             }
-            binding.root.setOnClickListener { onClick(item) }
+            binding.root.setOnClickListener {
+                if (item.enabled) onClick(item)
+            }
         }
     }
 }

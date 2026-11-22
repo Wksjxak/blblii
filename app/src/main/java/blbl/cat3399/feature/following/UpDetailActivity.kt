@@ -1196,7 +1196,7 @@ class UpDetailActivity : BaseActivity() {
                     "UpDetail",
                     "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
                         "pageItems=${mergedItems.size} feed=${feedPage.items.size} opus=${opusItems.size} " +
-                        "type=archive:${result.rawArchive},season:${result.rawSeason},extra:${result.rawExtra},rich:${result.rawRich} " +
+                        "type=archive:${result.rawArchive},dynamicvideo:${result.rawDynamicVideo},season:${result.rawSeason},extra:${result.rawExtra},rich:${result.rawRich} " +
                         "filtered=archive:${result.archiveHidden},showvideo_hidden:${result.videoHidden},dup:${result.dup} " +
                         "fresh=${fresh.size}",
                 )

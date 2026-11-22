@@ -53,6 +53,7 @@ internal object DynamicFeedParser {
         val ownerFace = author?.optString("face")?.takeIf { f -> f.isNotBlank() }
         val ownerMid = author?.optLong("mid")?.takeIf { v -> v > 0 }
         val authorPubTs = author?.optLong("pub_ts")?.takeIf { v -> v > 0 }
+        val authorPubAction = author?.optString("pub_action", "")?.trim().orEmpty()
 
         // 直播推荐卡片（major.live_rcmd / DYNAMIC_TYPE_LIVE_RCMD）：不进动态列表，单独记原因。
         val majorType = major?.optString("type", "").orEmpty()
@@ -62,7 +63,7 @@ internal object DynamicFeedParser {
         }
 
         // 视频类：投稿/合集/充电视频
-        parseArchiveVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
+        parseArchiveVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, authorPubAction, trackId)?.let { return it }
         parseUgcSeasonVideo(bili, major, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
         parseAdditionalUgcVideo(bili, moduleDynamic, ownerName, ownerFace, ownerMid, authorPubTs, trackId)?.let { return it }
 
@@ -315,11 +316,21 @@ internal object DynamicFeedParser {
         ownerFace: String?,
         ownerMid: Long?,
         authorPubTs: Long?,
+        authorPubAction: String,
         trackId: String?,
     ): DynamicFeedItem.Video? {
         val archive = major?.optJSONObject("archive") ?: return null
         val bvid = archive.optString("bvid", "")
         if (bvid.isBlank()) return null
+        val title = archive.optString("title", "")
+        // 投稿视频和动态视频都用 major.archive 承载，唯一可靠的区分是 module_author.pub_action：
+        // - 投稿了视频 / 与他人联合创作：与投稿 Tab 重复的本人投稿视频；
+        // - 发布了动态视频：只出现在动态里的动态视频，不属于投稿，不能被「隐藏本人投稿」误伤。
+        // 标题「动态视频｜...」是部分接口缺 pub_action 时的兜底。
+        val pubAction = authorPubAction.trim()
+        val dynamicByTitle = title.startsWith("动态视频｜") || title.startsWith("动态视频|")
+        val isDynamicVideo = pubAction == "发布了动态视频" || dynamicByTitle
+        val isSubmissionVideo = !isDynamicVideo && (pubAction == "投稿了视频" || pubAction == "与他人联合创作")
         val stat = archive.optJSONObject("stat") ?: JSONObject()
         val aid = archive.optLong("aid").takeIf { v -> v > 0 }
             ?: archive.optLong("avid").takeIf { v -> v > 0 }
@@ -334,7 +345,7 @@ internal object DynamicFeedParser {
                 bvid = bvid,
                 cid = null,
                 aid = aid,
-                title = archive.optString("title", ""),
+                title = title,
                 coverUrl = archive.optString("cover", ""),
                 durationSec = bili.parseDuration(archive.optString("duration_text", "0:00")),
                 ownerName = ownerName,
@@ -347,6 +358,8 @@ internal object DynamicFeedParser {
                 isChargingArc = charging,
                 trackId = trackId,
                 majorType = VideoCard.MAJOR_TYPE_ARCHIVE,
+                isSubmissionVideo = isSubmissionVideo,
+                isDynamicVideo = isDynamicVideo,
             ),
         )
     }

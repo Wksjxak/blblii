@@ -753,7 +753,8 @@ class AppPrefs(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_OPEN_DETAIL_BEFORE_PLAY, value).apply()
 
     /** UP 动态 Tab 是否隐藏「本人投稿视频动态」（和投稿 Tab 重复的归档部分）。
-     * 只隐藏与投稿列表重叠的本人归档视频；合集、附加分享、转发他人视频不受影响。 */
+     * 只隐藏 pub_action=投稿了视频 的本人投稿视频；动态视频、合集、附加分享、转发他人视频不受影响。
+     * 依赖 [upDynamicShowVideo] 开启后才可修改。 */
     var upDynamicHideArchiveVideo: Boolean
         get() = prefs.getBoolean("up_dynamic_hide_archive_video", false)
         set(value) = prefs.edit().putBoolean("up_dynamic_hide_archive_video", value).apply()
