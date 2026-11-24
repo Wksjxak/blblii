@@ -243,10 +243,8 @@ private fun PlayerActivity.resolvePageReverseAutoNextTarget(): AutoNextTarget.Pa
 private fun PlayerActivity.resolvePageShuffleTarget(): AutoNextTarget.Page? {
     val list = pageListItems
     if (list.size <= 1) return null
-    val candidates = list.indices.filter { it != pageListIndex }
-    if (candidates.isEmpty()) return null
-    val pick = candidates[kotlin.random.Random.nextInt(candidates.size)]
-    val item = list[pick]
+    val pick = peekShuffleIndex() ?: return null
+    val item = list.getOrNull(pick) ?: return null
     if (item.bvid.isBlank() && (item.aid ?: 0L) <= 0L) return null
     return AutoNextTarget.Page(index = pick, rawTitle = item.title)
 }

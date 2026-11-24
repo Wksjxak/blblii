@@ -238,6 +238,7 @@ internal fun PlayerActivity.applyPlaybackModeSetting(
     engine: BlblPlayerEngine,
 ) {
     val normalized = PlayerPlaybackModes.normalize(pickedCode)
+    resetShuffleBag()
     val defaultCode =
         if (!isPgcLikePlayback()) {
             normalized

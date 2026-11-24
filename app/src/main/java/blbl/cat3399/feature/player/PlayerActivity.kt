@@ -246,6 +246,10 @@ class PlayerActivity : BaseActivity() {
     internal var pageListIndex: Int = -1
     internal var pageListContinuation: PlayerPlaylistContinuation? = null
     internal var pageListLoadMoreJob: Job? = null
+    /** 随机播放的“洗牌袋”：本轮不重复的候选索引；由 playPageListIndex 消费。 */
+    internal var shuffleBag: MutableList<Int> = ArrayList()
+    internal var shuffleBagToken: String? = null
+    internal var shuffleBagSize: Int = -1
     internal val pageListLoadMoreCallbacks = ArrayList<(Boolean) -> Unit>()
 
     internal var partsListSource: String? = null

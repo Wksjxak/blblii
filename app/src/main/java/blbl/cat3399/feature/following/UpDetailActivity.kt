@@ -1179,6 +1179,7 @@ class UpDetailActivity : BaseActivity() {
                 // 不再用投稿第一页的 bvid 集合做归档匹配——archiveBvids 只覆盖 spaceArcSearch 首页 30 条，
                 // 该 UP 投稿总数可能上千，首页之外的归档视频 BV 匹配会漏判而被错误保留。
                 val hideArchiveVideo = BiliClient.prefs.upDynamicHideArchiveVideo
+                val hideDynamicVideo = BiliClient.prefs.upDynamicHideDynamicVideo
                 val showVideo = BiliClient.prefs.upDynamicShowVideo
                 // 仅保留给去重/高亮等其它用途；注意它只覆盖投稿第一页 30 条，禁止作为全量归档过滤判据。
                 val archiveBvids = archiveBrowseItems.mapTo(HashSet()) { it.bvid }
@@ -1189,15 +1190,16 @@ class UpDetailActivity : BaseActivity() {
                     hideArchiveVideo = hideArchiveVideo,
                     showVideo = showVideo,
                     seen = seen,
+                    hideDynamicVideo = hideDynamicVideo,
                 )
                 val fresh = result.fresh
                 if (fresh.isEmpty()) dynamicConsecutiveEmptyPages++ else dynamicConsecutiveEmptyPages = 0
                 AppLog.d(
                     "UpDetail",
-                    "dynamicFilter hide=$hideArchiveVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
+                    "dynamicFilter hide=$hideArchiveVideo hideDynamic=$hideDynamicVideo showVideo=$showVideo archiveBvids=${archiveBvids.size} " +
                         "pageItems=${mergedItems.size} feed=${feedPage.items.size} opus=${opusItems.size} " +
                         "type=archive:${result.rawArchive},dynamicvideo:${result.rawDynamicVideo},season:${result.rawSeason},extra:${result.rawExtra},rich:${result.rawRich} " +
-                        "filtered=archive:${result.archiveHidden},showvideo_hidden:${result.videoHidden},dup:${result.dup} " +
+                        "filtered=archive:${result.archiveHidden},dynamicvideo_hidden:${result.dynamicVideoHidden},showvideo_hidden:${result.videoHidden},dup:${result.dup} " +
                         "fresh=${fresh.size}",
                 )
                 // BV 列表仅 debug 包打印，release 生产日志不落 BV。

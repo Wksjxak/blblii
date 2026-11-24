@@ -26,6 +26,7 @@ class SettingsRenderer(
 ) {
     private var focusListener: android.view.ViewTreeObserver.OnGlobalFocusChangeListener? = null
     private val deviceCodecSupportValue: String by lazy { SettingsText.hardDecoderSupportText() }
+    private var searchQuery: String? = null
 
     fun installFocusListener() {
         if (focusListener != null) return
@@ -98,7 +99,9 @@ class SettingsRenderer(
             leftAdapter.setSelected(index)
         }
         val sectionName = sections.getOrNull(index)
-        val entries = buildEntriesForSection(sectionName)
+        searchQuery = null
+        binding.tvTitle.text = "设置"
+        val entries = buildEntriesForSection(sectionName).map { it.copy(sectionIndex = index) }
         rightAdapter.submit(entries)
         onSectionShown(sectionName.orEmpty())
 
@@ -117,6 +120,46 @@ class SettingsRenderer(
 
     fun refreshSection(focusId: SettingId? = null) {
         showSection(state.currentSectionIndex, focusId = focusId)
+    }
+
+    fun currentSearchQuery(): String? = searchQuery
+
+    fun isSearching(): Boolean = searchQuery != null
+
+    fun exitSearch() {
+        if (searchQuery == null) return
+        showSection(state.currentSectionIndex.coerceAtLeast(0))
+    }
+
+    /** 在全部设置分组里按标题/说明/当前值搜索；返回 false 表示没有结果。 */
+    fun showSearchResults(rawQuery: String): Boolean {
+        val query = rawQuery.trim()
+        if (query.isBlank()) return false
+        val tokens = query.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val results = ArrayList<SettingEntry>()
+        sections.forEachIndexed { index, section ->
+            for (entry in buildEntriesForSection(section)) {
+                val haystack = buildString {
+                    append(entry.title)
+                    entry.desc?.let { append(' ').append(it) }
+                    append(' ').append(entry.value)
+                }
+                if (tokens.all { haystack.contains(it, ignoreCase = true) }) {
+                    results.add(entry.copy(sectionIndex = index))
+                }
+            }
+        }
+        if (results.isEmpty()) {
+            searchQuery = null
+            return false
+        }
+        searchQuery = query
+        state.focusRequestToken++
+        rightAdapter.submit(results)
+        binding.tvTitle.text = "搜索：$query"
+        state.pendingRestoreRightId = results.first().id
+        binding.recyclerRight.post { restorePendingFocus() }
+        return true
     }
 
     fun refreshAboutSectionKeepPosition() {
@@ -159,6 +202,7 @@ class SettingsRenderer(
         if (currentFocus?.isAttachedToWindow == true) {
             when {
                 currentFocus == binding.btnBack -> return true
+                currentFocus == binding.btnSearch -> return true
                 FocusTreeUtils.isDescendantOf(currentFocus, binding.recyclerLeft) -> return true
                 FocusTreeUtils.isDescendantOf(currentFocus, binding.recyclerRight) -> return true
             }
@@ -480,6 +524,12 @@ class SettingsRenderer(
                     ),
                     SettingEntry(SettingId.PlayerOpenDetailBeforePlay, "播放前打开详情页", if (prefs.playerOpenDetailBeforePlay) "开" else "关", null),
                     SettingEntry(
+                        SettingId.UpDynamicShowVideo,
+                        "动态栏显示视频类动态",
+                        if (prefs.upDynamicShowVideo) "开" else "关",
+                        "视频类动态总开关；关闭后归档/合集/附加分享等所有视频卡片都不显示，只留图文动态",
+                    ),
+                    SettingEntry(
                         SettingId.UpDynamicHideArchiveVideo,
                         "动态栏隐藏本人投稿视频",
                         when {
@@ -495,10 +545,19 @@ class SettingsRenderer(
                         enabled = prefs.upDynamicShowVideo,
                     ),
                     SettingEntry(
-                        SettingId.UpDynamicShowVideo,
-                        "动态栏显示视频类动态",
-                        if (prefs.upDynamicShowVideo) "开" else "关",
-                        "视频类动态总开关；关闭后归档/合集/附加分享等所有视频卡片都不显示，只留图文动态",
+                        SettingId.UpDynamicHideDynamicVideo,
+                        "动态栏隐藏动态视频",
+                        when {
+                            !prefs.upDynamicShowVideo -> "不可改"
+                            prefs.upDynamicHideDynamicVideo -> "开"
+                            else -> "关"
+                        },
+                        if (!prefs.upDynamicShowVideo) {
+                            "需先开启「动态栏显示视频类动态」"
+                        } else {
+                            "仅隐藏本人动态视频（发布了动态视频）；投稿视频、合集、附加分享、转发他人视频不受影响"
+                        },
+                        enabled = prefs.upDynamicShowVideo,
                     ),
                     SettingEntry(SettingId.DynamicDetailTextSize, "动态详情字号", prefs.dynamicDetailTextSize.toInt().toString() + "sp", null),
                     SettingEntry(

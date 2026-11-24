@@ -1498,6 +1498,15 @@ class SettingsInteractionHandler(
                 renderer.refreshSection(entry.id)
             }
 
+            SettingId.UpDynamicHideDynamicVideo -> {
+                if (!prefs.upDynamicShowVideo) {
+                    AppToast.show(activity, "请先开启「动态栏显示视频类动态」")
+                    return
+                }
+                prefs.upDynamicHideDynamicVideo = !prefs.upDynamicHideDynamicVideo
+                renderer.refreshSection(entry.id)
+            }
+
             SettingId.UpDynamicShowVideo -> {
                 prefs.upDynamicShowVideo = !prefs.upDynamicShowVideo
                 renderer.refreshSection(entry.id)

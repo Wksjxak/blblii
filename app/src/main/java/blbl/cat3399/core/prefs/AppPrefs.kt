@@ -766,6 +766,13 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean("up_dynamic_show_video", true)
         set(value) = prefs.edit().putBoolean("up_dynamic_show_video", value).apply()
 
+    /** UP 动态 Tab 是否隐藏「本人动态视频」（pub_action=发布了动态视频）。
+     * 与 [upDynamicHideArchiveVideo] 同级但互不覆盖：只隐藏动态视频，投稿视频不受影响。
+     * 依赖 [upDynamicShowVideo] 开启后才可修改。 */
+    var upDynamicHideDynamicVideo: Boolean
+        get() = prefs.getBoolean("up_dynamic_hide_dynamic_video", false)
+        set(value) = prefs.edit().putBoolean("up_dynamic_hide_dynamic_video", value).apply()
+
     /** 动态详情正文字号（sp），默认 20。 */
     var dynamicDetailTextSize: Float
         get() = prefs.getFloat(KEY_DYNAMIC_DETAIL_TEXT_SIZE, 20f).coerceIn(DYNAMIC_DETAIL_TEXT_SIZE_MIN, DYNAMIC_DETAIL_TEXT_SIZE_MAX)

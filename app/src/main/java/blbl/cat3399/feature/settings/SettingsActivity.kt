@@ -2,6 +2,7 @@ package blbl.cat3399.feature.settings
 
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,10 +10,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.core.io.CreateDocumentContract
 import blbl.cat3399.core.net.BiliClient
+import blbl.cat3399.core.ui.AppToast
 import blbl.cat3399.core.ui.BaseActivity
 import blbl.cat3399.core.ui.FocusTreeUtils
 import blbl.cat3399.core.ui.cloneInUserScale
 import blbl.cat3399.core.ui.Immersive
+import blbl.cat3399.core.ui.popup.AppPopup
 import blbl.cat3399.core.ui.popup.PopupHost
 import blbl.cat3399.databinding.ActivitySettingsBinding
 
@@ -79,7 +82,13 @@ class SettingsActivity : BaseActivity() {
 
         binding.recyclerRight.layoutManager = LinearLayoutManager(this)
         binding.recyclerRight.itemAnimator = null
-        rightAdapter = SettingsEntryAdapter { entry -> interactionHandler.onEntryClicked(entry) }
+        rightAdapter =
+            SettingsEntryAdapter { entry ->
+                if (entry.sectionIndex >= 0 && this::renderer.isInitialized && renderer.isSearching()) {
+                    renderer.showSection(entry.sectionIndex, focusId = entry.id)
+                }
+                interactionHandler.onEntryClicked(entry)
+            }
         binding.recyclerRight.adapter = rightAdapter
 
         renderer =
@@ -93,6 +102,7 @@ class SettingsActivity : BaseActivity() {
                 onSectionShown = { sectionName -> interactionHandler.onSectionShown(sectionName) },
             )
         interactionHandler.renderer = renderer
+        binding.btnSearch.setOnClickListener { showSettingsSearchDialog() }
 
         renderer.installFocusListener()
         renderer.showSection(0)
@@ -123,6 +133,10 @@ class SettingsActivity : BaseActivity() {
         }
 
         val keyCode = event.keyCode
+        if (event.action == KeyEvent.ACTION_DOWN && isBackLikeKey(keyCode) && renderer.isSearching()) {
+            renderer.exitSearch()
+            return true
+        }
         if (handleExplicitFocusKey(event)) return true
         if (isBackLikeKey(keyCode)) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -167,6 +181,20 @@ class SettingsActivity : BaseActivity() {
 
     private fun handleFocusKeyDown(keyCode: Int): Boolean {
         val focused = currentFocus ?: return false
+        if (focused == binding.btnSearch) {
+            return when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    binding.btnBack.requestFocus()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> renderer.focusActiveSectionContent()
+                else -> false
+            }
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && focused == binding.btnBack) {
+            binding.btnSearch.requestFocus()
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && focused == binding.btnBack) {
             return renderer.focusLastSectionTab()
         }
@@ -217,6 +245,32 @@ class SettingsActivity : BaseActivity() {
         }
 
         return false
+    }
+
+    private fun showSettingsSearchDialog() {
+        if (!this::renderer.isInitialized) return
+        AppPopup.input(
+            context = this,
+            title = "搜索设置",
+            initial = renderer.currentSearchQuery().orEmpty(),
+            hint = "输入设置名称，如弹幕、动态视频、播放模式",
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_NORMAL,
+            positiveText = "搜索",
+            negativeText = "取消",
+            validate = { text ->
+                if (text.trim().isBlank()) {
+                    AppToast.show(this, "请输入搜索关键词")
+                    false
+                } else {
+                    true
+                }
+            },
+            onPositive = { text ->
+                if (!renderer.showSearchResults(text)) {
+                    AppToast.show(this, "没有找到匹配的设置")
+                }
+            },
+        )
     }
 
     private fun focusedAdapterPosition(recyclerView: RecyclerView, focused: View): Int {

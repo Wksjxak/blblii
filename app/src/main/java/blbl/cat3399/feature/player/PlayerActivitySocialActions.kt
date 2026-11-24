@@ -574,15 +574,48 @@ internal fun PlayerActivity.playNextReversed(userInitiated: Boolean) {
     finish()
 }
 
-internal fun PlayerActivity.playNextShuffled(userInitiated: Boolean) {
+internal fun PlayerActivity.resetShuffleBag() {
+    shuffleBag.clear()
+    shuffleBagToken = null
+    shuffleBagSize = -1
+}
+
+/** 洗牌袋：先不重复地播完一轮，再重新洗牌；自动连播和手动「下一个」共用同一个袋子。 */
+private fun PlayerActivity.ensureShuffleBag() {
     val list = pageListItems
-    if (list.size <= 1 || pageListIndex !in list.indices) {
+    val token = pageListToken
+    if (token == shuffleBagToken && shuffleBagSize == list.size) return
+    shuffleBag.clear()
+    shuffleBag.addAll(list.indices.filter { it != pageListIndex })
+    shuffleBag.shuffle()
+    shuffleBagToken = token
+    shuffleBagSize = list.size
+}
+
+/** 预览/实际播放都取袋子里的第一个；真正播放由 [playPageListIndex] 消费。 */
+internal fun PlayerActivity.peekShuffleIndex(): Int? {
+    val list = pageListItems
+    if (list.size <= 1 || pageListIndex !in list.indices) return null
+    ensureShuffleBag()
+    shuffleBag.removeAll { it !in list.indices || it == pageListIndex }
+    if (shuffleBag.isEmpty()) {
+        shuffleBag.addAll(list.indices.filter { it != pageListIndex })
+        shuffleBag.shuffle()
+    }
+    return shuffleBag.firstOrNull()
+}
+
+internal fun PlayerActivity.markShufflePlayed(index: Int) {
+    shuffleBag.remove(index)
+}
+
+internal fun PlayerActivity.playNextShuffled(userInitiated: Boolean) {
+    val pick = peekShuffleIndex()
+    if (pick == null) {
         if (userInitiated) AppToast.show(this, "无下一个视频，已退出播放器")
         finish()
         return
     }
-    val candidates = list.indices.filter { it != pageListIndex }
-    val pick = candidates[kotlin.random.Random.nextInt(candidates.size)]
     playPageListIndex(pick, showTitleHint = userInitiated)
 }
 
@@ -694,6 +727,9 @@ internal fun PlayerActivity.playPageListIndex(index: Int, showTitleHint: Boolean
     }
 
     pageListIndex = index.coerceIn(0, list.lastIndex)
+    if (resolvedPlaybackMode() == AppPrefs.PLAYER_PLAYBACK_MODE_PAGE_LIST_SHUFFLE) {
+        markShufflePlayed(pageListIndex)
+    }
     pageListToken?.let { PlayerPlaylistStore.updateIndex(it, pageListIndex) }
     updatePlaylistControls()
     startPlayback(

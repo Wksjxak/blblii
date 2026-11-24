@@ -69,6 +69,7 @@ enum class SettingId(
     PlayerAutoSkipServerBaseUrl("player_auto_skip_server_base_url"),
     PlayerOpenDetailBeforePlay("player_open_detail_before_play"),
     UpDynamicHideArchiveVideo("up_dynamic_hide_archive_video"),
+    UpDynamicHideDynamicVideo("up_dynamic_hide_dynamic_video"),
     UpDynamicShowVideo("up_dynamic_show_video"),
     DynamicDetailTextSize("dynamic_detail_text_size"),
     DynamicCommentTextSize("dynamic_comment_text_size"),
@@ -147,4 +148,6 @@ data class SettingEntry(
     val desc: String?,
     /** 为 false 时置灰且不可点击；用于依赖其它开关的子设置项。 */
     val enabled: Boolean = true,
+    /** 搜索结果里记录条目所属分组，点击后先切回该分组；普通列表为 -1 或由渲染器填充。 */
+    val sectionIndex: Int = -1,
 )
