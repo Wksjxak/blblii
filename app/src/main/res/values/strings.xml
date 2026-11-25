@@ -85,6 +85,10 @@
     <string name="action_logout">退出登录</string>
 
     <string name="up_tab_archive">投稿</string>
+    <string name="settings_search_hint">搜索设置（可用拼音 / 首字母）</string>
+    <string name="settings_search_clear">清空</string>
+    <string name="settings_search_empty">没有找到匹配的设置</string>
+    <string name="settings_search_count_fmt">找到 %1$d 项设置，点击跳转到对应分组</string>
     <string name="up_archive_search_hint">搜索 TA 的视频（可用拼音 / 首字母）</string>
     <string name="up_archive_search_clear">清空</string>
     <string name="up_tab_dynamic">动态</string>

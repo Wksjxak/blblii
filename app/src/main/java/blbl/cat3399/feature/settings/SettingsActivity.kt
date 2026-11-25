@@ -2,20 +2,24 @@ package blbl.cat3399.feature.settings
 
 import android.net.Uri
 import android.os.Bundle
-import android.text.InputType
+import android.os.Handler
+import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import blbl.cat3399.R
 import blbl.cat3399.core.io.CreateDocumentContract
 import blbl.cat3399.core.net.BiliClient
-import blbl.cat3399.core.ui.AppToast
 import blbl.cat3399.core.ui.BaseActivity
 import blbl.cat3399.core.ui.FocusTreeUtils
 import blbl.cat3399.core.ui.cloneInUserScale
 import blbl.cat3399.core.ui.Immersive
-import blbl.cat3399.core.ui.popup.AppPopup
+import blbl.cat3399.core.ui.hideImeReliable
+import blbl.cat3399.core.ui.showImeReliable
 import blbl.cat3399.core.ui.popup.PopupHost
 import blbl.cat3399.databinding.ActivitySettingsBinding
 
@@ -27,6 +31,9 @@ class SettingsActivity : BaseActivity() {
     private lateinit var renderer: SettingsRenderer
     private lateinit var interactionHandler: SettingsInteractionHandler
     private val focusKeyState = SettingsFocusKeyState()
+    private val settingsSearchHandler = Handler(Looper.getMainLooper())
+    private val settingsSearchRunnable = Runnable { runSettingsSearch() }
+    private var suppressSearchWatcher = false
 
     private val gaiaVgateLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -74,7 +81,10 @@ class SettingsActivity : BaseActivity() {
 
         binding.btnBack.setOnClickListener { finish() }
 
-        leftAdapter = SettingsLeftAdapter { index -> renderer.showSection(index, keepScroll = false) }
+        leftAdapter = SettingsLeftAdapter { index ->
+            closeSettingsSearch(restoreSection = false)
+            renderer.showSection(index, keepScroll = false)
+        }
         binding.recyclerLeft.layoutManager = LinearLayoutManager(this)
         binding.recyclerLeft.itemAnimator = null
         binding.recyclerLeft.adapter = leftAdapter
@@ -84,8 +94,11 @@ class SettingsActivity : BaseActivity() {
         binding.recyclerRight.itemAnimator = null
         rightAdapter =
             SettingsEntryAdapter { entry ->
-                if (entry.sectionIndex >= 0 && this::renderer.isInitialized && renderer.isSearching()) {
-                    renderer.showSection(entry.sectionIndex, focusId = entry.id)
+                if (this::renderer.isInitialized && renderer.isSearching() && entry.sectionIndex >= 0) {
+                    // 搜索结果只负责跳转，不直接触发设置动作（否则会把开关点翻）。
+                    closeSettingsSearch(restoreSection = false)
+                    renderer.showSection(entry.sectionIndex, keepScroll = false, focusId = entry.id)
+                    return@SettingsEntryAdapter
                 }
                 interactionHandler.onEntryClicked(entry)
             }
@@ -102,7 +115,8 @@ class SettingsActivity : BaseActivity() {
                 onSectionShown = { sectionName -> interactionHandler.onSectionShown(sectionName) },
             )
         interactionHandler.renderer = renderer
-        binding.btnSearch.setOnClickListener { showSettingsSearchDialog() }
+        binding.btnSearch.setOnClickListener { openSettingsSearch() }
+        setupSettingsSearchBar()
 
         renderer.installFocusListener()
         renderer.showSection(0)
@@ -110,10 +124,12 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        renderer.ensureInitialFocus()
+        // 搜索栏可见时不要抢走输入框焦点（否则刚点开搜索就被列表抢回去）。
+        if (!isSettingsSearchVisible()) renderer.ensureInitialFocus()
     }
 
     override fun onDestroy() {
+        settingsSearchHandler.removeCallbacks(settingsSearchRunnable)
         renderer.uninstallFocusListener()
         super.onDestroy()
     }
@@ -121,7 +137,7 @@ class SettingsActivity : BaseActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) Immersive.apply(this, BiliClient.prefs.fullscreenEnabled)
-        if (hasFocus) renderer.restorePendingFocus()
+        if (hasFocus && !isSettingsSearchVisible()) renderer.restorePendingFocus()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -133,8 +149,8 @@ class SettingsActivity : BaseActivity() {
         }
 
         val keyCode = event.keyCode
-        if (event.action == KeyEvent.ACTION_DOWN && isBackLikeKey(keyCode) && renderer.isSearching()) {
-            renderer.exitSearch()
+        if (event.action == KeyEvent.ACTION_DOWN && isBackLikeKey(keyCode) && isSettingsSearchVisible()) {
+            closeSettingsSearch(restoreSection = true)
             return true
         }
         if (handleExplicitFocusKey(event)) return true
@@ -187,7 +203,14 @@ class SettingsActivity : BaseActivity() {
                     binding.btnBack.requestFocus()
                     true
                 }
-                KeyEvent.KEYCODE_DPAD_DOWN -> renderer.focusActiveSectionContent()
+                KeyEvent.KEYCODE_DPAD_DOWN ->
+                    if (isSettingsSearchVisible()) {
+                        binding.etSettingsSearch.requestFocus()
+                        binding.etSettingsSearch.showImeReliable()
+                        true
+                    } else {
+                        renderer.focusActiveSectionContent()
+                    }
                 else -> false
             }
         }
@@ -247,31 +270,95 @@ class SettingsActivity : BaseActivity() {
         return false
     }
 
-    private fun showSettingsSearchDialog() {
-        if (!this::renderer.isInitialized) return
-        AppPopup.input(
-            context = this,
-            title = "搜索设置",
-            initial = renderer.currentSearchQuery().orEmpty(),
-            hint = "输入设置名称，如弹幕、动态视频、播放模式",
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_NORMAL,
-            positiveText = "搜索",
-            negativeText = "取消",
-            validate = { text ->
-                if (text.trim().isBlank()) {
-                    AppToast.show(this, "请输入搜索关键词")
-                    false
-                } else {
-                    true
-                }
-            },
-            onPositive = { text ->
-                if (!renderer.showSearchResults(text)) {
-                    AppToast.show(this, "没有找到匹配的设置")
+    private fun setupSettingsSearchBar() {
+        binding.etSettingsSearch.addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+
+                override fun afterTextChanged(s: Editable?) {
+                    if (suppressSearchWatcher) return
+                    scheduleSettingsSearch(s?.toString().orEmpty())
                 }
             },
         )
+        binding.etSettingsSearch.setOnEditorActionListener { _, _, _ ->
+            binding.etSettingsSearch.hideImeReliable()
+            true
+        }
+        binding.etSettingsSearch.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                renderer.focusActiveSectionContent()
+                true
+            } else {
+                false
+            }
+        }
+        binding.btnSettingsSearchClear.setOnClickListener {
+            if (binding.etSettingsSearch.text.isNullOrEmpty()) {
+                closeSettingsSearch(restoreSection = true)
+            } else {
+                binding.etSettingsSearch.setText("")
+            }
+        }
     }
+
+    private fun openSettingsSearch() {
+        if (!this::renderer.isInitialized) return
+        binding.llSettingsSearch.visibility = View.VISIBLE
+        // 等搜索栏完成一次布局再要焦点，否则部分机型会把焦点/软键盘丢掉。
+        binding.etSettingsSearch.post {
+            binding.etSettingsSearch.requestFocus()
+            binding.etSettingsSearch.setSelection(binding.etSettingsSearch.text?.length ?: 0)
+            binding.etSettingsSearch.showImeReliable()
+        }
+    }
+
+    private fun closeSettingsSearch(restoreSection: Boolean) {
+        if (binding.llSettingsSearch.visibility != View.VISIBLE) return
+        settingsSearchHandler.removeCallbacks(settingsSearchRunnable)
+        binding.etSettingsSearch.hideImeReliable()
+        binding.llSettingsSearch.visibility = View.GONE
+        binding.tvSettingsSearchStatus.visibility = View.GONE
+        if (binding.etSettingsSearch.text?.isNotEmpty() == true) {
+            // 清空输入会触发 TextWatcher，这里屏蔽掉，避免多重建一次列表。
+            suppressSearchWatcher = true
+            binding.etSettingsSearch.setText("")
+            suppressSearchWatcher = false
+        }
+        if (restoreSection && this::renderer.isInitialized && renderer.isSearching()) {
+            renderer.exitSearch()
+        }
+    }
+
+    private fun scheduleSettingsSearch(raw: String) {
+        settingsSearchHandler.removeCallbacks(settingsSearchRunnable)
+        val query = raw.trim()
+        if (query.isEmpty()) {
+            binding.tvSettingsSearchStatus.visibility = View.GONE
+            if (this::renderer.isInitialized && renderer.isSearching()) renderer.exitSearch()
+            return
+        }
+        settingsSearchHandler.postDelayed(settingsSearchRunnable, 120L)
+    }
+
+    private fun runSettingsSearch() {
+        if (!this::renderer.isInitialized) return
+        val query = binding.etSettingsSearch.text?.toString().orEmpty().trim()
+        if (query.isEmpty()) return
+        val count = renderer.showSearchResults(query)
+        binding.tvSettingsSearchStatus.visibility = View.VISIBLE
+        binding.tvSettingsSearchStatus.text =
+            if (count > 0) {
+                getString(R.string.settings_search_count_fmt, count)
+            } else {
+                getString(R.string.settings_search_empty)
+            }
+        binding.recyclerRight.scrollToPosition(0)
+    }
+
+    private fun isSettingsSearchVisible(): Boolean = binding.llSettingsSearch.visibility == View.VISIBLE
 
     private fun focusedAdapterPosition(recyclerView: RecyclerView, focused: View): Int {
         return recyclerView.findContainingViewHolder(focused)?.bindingAdapterPosition

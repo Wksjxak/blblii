@@ -38,37 +38,37 @@ class SettingsLeftAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Vh {
         val binding = ItemSettingsLeftBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        return Vh(binding)
+        val holder = Vh(binding)
+        // 点击只挂一次；位置在点击时现取，避免复用后绑到旧位置。
+        binding.root.setOnClickListener {
+            val clickedPosition = holder.bindingAdapterPosition
+            if (clickedPosition != RecyclerView.NO_POSITION) onClick(clickedPosition)
+        }
+        return holder
     }
 
     override fun onBindViewHolder(holder: Vh, position: Int) {
-        holder.bind(items[position], position == selected) {
-            val clickedPosition = holder.bindingAdapterPosition
-            if (clickedPosition == RecyclerView.NO_POSITION) return@bind
-
-            onClick(clickedPosition)
-        }
+        holder.bind(items[position], position == selected)
     }
 
     override fun getItemCount(): Int = items.size
 
     class Vh(private val binding: ItemSettingsLeftBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(text: String, selected: Boolean, onClick: () -> Unit) {
+        /** 选中底色与主题相关，只在首次 bind 时解析一次。 */
+        private var accentContainerColor: Int? = null
+
+        fun bind(text: String, selected: Boolean) {
             binding.tvTitle.text = text
             binding.root.isSelected = selected
             val ctx = binding.root.context
-            binding.root.setCardBackgroundColor(
-                if (selected) {
-                    ThemeColor.resolve(
+            val accent =
+                accentContainerColor
+                    ?: ThemeColor.resolve(
                         context = ctx,
                         attr = R.attr.blblAccentContainer,
                         fallbackRes = R.color.blbl_accent_violet_container,
-                    )
-                } else {
-                    0x00000000
-                },
-            )
-            binding.root.setOnClickListener { onClick() }
+                    ).also { accentContainerColor = it }
+            binding.root.setCardBackgroundColor(if (selected) accent else 0x00000000)
         }
     }
 }

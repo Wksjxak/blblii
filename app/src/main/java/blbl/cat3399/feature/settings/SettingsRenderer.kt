@@ -11,6 +11,7 @@ import blbl.cat3399.core.prefs.AppPrefs
 import blbl.cat3399.core.ui.FocusTreeUtils
 import blbl.cat3399.core.ui.requestFocusAdapterPositionReliable
 import blbl.cat3399.databinding.ActivitySettingsBinding
+import blbl.cat3399.feature.dynamic.PinyinSearch
 import blbl.cat3399.feature.player.AudioBalanceLevel
 import blbl.cat3399.feature.player.PlaybackSettingChoices
 import blbl.cat3399.feature.player.engine.IjkPlayerPlugin
@@ -122,8 +123,6 @@ class SettingsRenderer(
         showSection(state.currentSectionIndex, focusId = focusId)
     }
 
-    fun currentSearchQuery(): String? = searchQuery
-
     fun isSearching(): Boolean = searchQuery != null
 
     fun exitSearch() {
@@ -131,11 +130,13 @@ class SettingsRenderer(
         showSection(state.currentSectionIndex.coerceAtLeast(0))
     }
 
-    /** 在全部设置分组里按标题/说明/当前值搜索；返回 false 表示没有结果。 */
-    fun showSearchResults(rawQuery: String): Boolean {
+    /** 在全部设置分组里按标题/说明/当前值搜索；返回命中条数，0 表示没有结果。 */
+    fun showSearchResults(rawQuery: String): Int {
         val query = rawQuery.trim()
-        if (query.isBlank()) return false
+        if (query.isBlank()) return 0
         val tokens = query.split(Regex("\\s+")).filter { it.isNotBlank() }
+        // 单关键词支持拼音/首字母，和动态页搜 UP 主一致；多关键词退回逐词包含。
+        val pinyinMatcher = if (query.none { it.isWhitespace() }) PinyinSearch.matcher(query) else null
         val results = ArrayList<SettingEntry>()
         sections.forEachIndexed { index, section ->
             for (entry in buildEntriesForSection(section)) {
@@ -144,22 +145,34 @@ class SettingsRenderer(
                     entry.desc?.let { append(' ').append(it) }
                     append(' ').append(entry.value)
                 }
-                if (tokens.all { haystack.contains(it, ignoreCase = true) }) {
-                    results.add(entry.copy(sectionIndex = index))
+                val hit = pinyinMatcher?.invoke(entry.title) == true || tokens.all { haystack.contains(it, ignoreCase = true) }
+                if (hit) {
+                    results.add(
+                        entry.copy(
+                            sectionIndex = index,
+                            // 搜索结果混了所有分组，条目上标出所属分组，避免同名/相近项分不清。
+                            desc =
+                                listOfNotNull(section, entry.desc?.takeIf { it.isNotBlank() })
+                                    .joinToString(" · "),
+                            // 搜索结果只用来跳转，置灰项也应能点进去（点进去后再看为什么不可改）。
+                            enabled = true,
+                        ),
+                    )
                 }
             }
         }
-        if (results.isEmpty()) {
-            searchQuery = null
-            return false
-        }
         searchQuery = query
         state.focusRequestToken++
-        rightAdapter.submit(results)
         binding.tvTitle.text = "搜索：$query"
+        if (results.isEmpty()) {
+            state.pendingRestoreRightId = null
+            rightAdapter.submit(emptyList())
+            return 0
+        }
+        rightAdapter.submit(results)
         state.pendingRestoreRightId = results.first().id
         binding.recyclerRight.post { restorePendingFocus() }
-        return true
+        return results.size
     }
 
     fun refreshAboutSectionKeepPosition() {

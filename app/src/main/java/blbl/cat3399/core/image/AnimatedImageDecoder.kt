@@ -85,10 +85,8 @@ internal object AnimatedImageDecoder {
 
         if (oldSystemDrawable != null && oldSystemDrawable.intrinsicWidth > 0 && oldSystemDrawable.intrinsicHeight > 0) {
             // 全屏看图器始终循环播放；0 表示无限循环，避免部分 APNG/WebP 只播一次。
-            if (oldSystemDrawable is FrameAnimationDrawable<*>) {
-                runCatching { oldSystemDrawable.setLoopLimit(0) }
-                    .onFailure { AppLog.w(TAG, "setLoopLimit failed kind=$kind", it) }
-            }
+            runCatching { oldSystemDrawable.setLoopLimit(0) }
+                .onFailure { AppLog.w(TAG, "setLoopLimit failed kind=$kind", it) }
             AppLog.d(
                 TAG,
                 "animated via APNG4Android kind=$kind size=${oldSystemDrawable.intrinsicWidth}x${oldSystemDrawable.intrinsicHeight}",

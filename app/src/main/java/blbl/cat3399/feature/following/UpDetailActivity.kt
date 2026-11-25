@@ -2173,7 +2173,7 @@ class UpDetailActivity : BaseActivity() {
         // 简版图文条目不带 basic 评论路由，先从详情接口补一次 oid/type；失败再回退列表兜底值。
         lifecycleScope.launch {
             val routing = if (!item.commentRouted) BiliApi.dynamicCommentRouting(item.dynId) else null
-            val oid = routing?.first ?: item.dynOid!!
+            val oid = routing?.first ?: item.dynOid
             val commentType = routing?.second ?: item.commentType
             showDynamicCommentsPopup(oid = oid, commentType = commentType)
         }

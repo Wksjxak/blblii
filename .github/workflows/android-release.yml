@@ -39,6 +39,12 @@ jobs:
         run: |
           VCODE=$((100000 + GITHUB_RUN_NUMBER))
           ./gradlew assembleRelease -PversionName=${{ inputs.version_name }} -PversionCode=$VCODE
+      - name: Run unit tests
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest
       - name: Upload release APK to R2 (optional)
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

@@ -48,15 +48,29 @@ class SettingsEntryAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Vh {
         val binding = ItemSettingEntryBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        return Vh(binding)
+        return Vh(binding, onClick)
     }
 
-    override fun onBindViewHolder(holder: Vh, position: Int) = holder.bind(items[position], onClick)
+    override fun onBindViewHolder(holder: Vh, position: Int) = holder.bind(items[position])
 
     override fun getItemCount(): Int = items.size
 
-    class Vh(private val binding: ItemSettingEntryBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(item: SettingEntry, onClick: (SettingEntry) -> Unit) {
+    class Vh(
+        private val binding: ItemSettingEntryBinding,
+        private val onClick: (SettingEntry) -> Unit,
+    ) : RecyclerView.ViewHolder(binding.root) {
+        private var item: SettingEntry? = null
+
+        init {
+            // 点击监听只挂一次，避免每次 bind 都新建 lambda。
+            binding.root.setOnClickListener {
+                val current = item ?: return@setOnClickListener
+                if (current.enabled) onClick(current)
+            }
+        }
+
+        fun bind(item: SettingEntry) {
+            this.item = item
             binding.root.tag = item.id
             binding.root.isEnabled = item.enabled
             binding.root.alpha = if (item.enabled) 1f else 0.45f
@@ -73,9 +87,6 @@ class SettingsEntryAdapter(
             } else {
                 binding.tvDesc.visibility = android.view.View.VISIBLE
                 binding.tvDesc.text = item.desc
-            }
-            binding.root.setOnClickListener {
-                if (item.enabled) onClick(item)
             }
         }
     }
